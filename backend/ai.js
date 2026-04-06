@@ -173,3 +173,42 @@ Respond with the JSON assessment.`;
     throw error;
   }
 }
+
+/**
+ * Generate human-readable explanation and recommendations
+ * purely from the temporal CV state signals.
+ */
+export async function generateSummaryFromCV(cvState, environmentContext = {}) {
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-3.1-flash-lite-preview",
+      generationConfig: { responseMimeType: "application/json" },
+    });
+
+    const userPrompt = `You are a Crisis Response Operator summarizing a CCTV CV pipeline output.
+
+CV State:
+Location: ${cvState.location}
+Description: ${cvState.description}
+Raw Detections: ${JSON.stringify(cvState.sensorSignals)}
+
+Provide a JSON object containing:
+1. "hazardType" (pick the best matching category like "Fires and Hazards", "Flood", "Crowd Panic")
+2. "isCompound" (boolean)
+3. "compoundTypes" (array of strings, if applicable)
+4. "liveFactors" (0-10 estimates for: currentSeverity, peopleAtRisk, timeToHarm, spreadPotential, evacuationDifficulty, meshOfflineNeed)
+5. "explanation" (array of 3-5 bullet points explaining the scene)
+6. "recommendedActions" (array of 3-6 specific actions)
+7. "confidence" (0.0 to 1.0)
+
+Keep it factual based on the CV state.
+`;
+
+    const result = await model.generateContent(userPrompt);
+    const parsed = JSON.parse(result.response.text());
+    return parsed;
+  } catch(e) {
+    console.error("[CCTV AI] Summary generation failed:", e.message);
+    throw e;
+  }
+}

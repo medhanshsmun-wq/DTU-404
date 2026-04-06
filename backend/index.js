@@ -12,7 +12,7 @@ import { Server } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
 
-import { analyzeIncident } from "./ai.js";
+import { analyzeIncident, generateSummaryFromCV } from "./ai.js";
 import { computeFinalPriority } from "./scoring.js";
 import { startWeatherFeed, getCurrentWeather, checkWeatherThresholds } from "./feeds/weatherFeed.js";
 import { startEarthquakeFeed, getSeismicStatus, getLatestQuakes, checkEarthquakeThresholds } from "./feeds/earthquakeFeed.js";
@@ -160,6 +160,62 @@ app.post("/api/cctv/scenario", (req, res) => {
   const { scenario } = req.body;
   setCCTVScenario(scenario);
   res.json({ success: true, scenario });
+});
+
+// Hybrid CCTV Pipeline Webhook (from Python tracker)
+app.post("/api/cctv/stream_event", async (req, res) => {
+  const { source, location, description, sensorSignals } = req.body;
+  
+  if (!description) return res.status(400).json({ error: "Missing CV state description" });
+
+  try {
+    console.log(`[CCTV Hybrid] Received CV Tracker Event: "${description}"`);
+    
+    // 1. Generate explanation/factors from AI purely using CV State
+    const cvState = { location, description, sensorSignals };
+    const environmentContext = { weather: getCurrentWeather(), seismic: getSeismicStatus() };
+    const aiResult = await generateSummaryFromCV(cvState, environmentContext);
+
+    // 2. Format incident for Scoring Engine
+    const incidentForScoring = {
+      hazardType: aiResult.hazardType,
+      isCompound: aiResult.isCompound,
+      compoundTypes: aiResult.compoundTypes,
+      liveFactors: aiResult.liveFactors,
+      rawDescription: description,
+      sensorSignals: sensorSignals || {},
+    };
+
+    // 3. Score Incident deterministically
+    const scoring = computeFinalPriority(incidentForScoring);
+
+    // 4. Build Record
+    const incident = {
+      id: genId(),
+      timestamp: new Date().toISOString(),
+      status: "Active",
+      source: source || "sensor_cctv",
+      hazardType: aiResult.hazardType,
+      isCompound: aiResult.isCompound,
+      compoundTypes: aiResult.compoundTypes || [],
+      rawDescription: description,
+      location: location || "Main Lobby Camera A",
+      ...scoring,
+      confidence: aiResult.confidence,
+      explanation: aiResult.explanation,
+      recommendedActions: aiResult.recommendedActions,
+      sensorSignals: sensorSignals || {},
+    };
+
+    // 5. Trigger Broadcast
+    activeIncidents.push(incident);
+    broadcastIncidents();
+    
+    res.json(incident);
+  } catch (err) {
+    console.error("[CCTV Hybrid] Error processing stream event:", err.message);
+    res.status(500).json({ error: "Failed to process CCTV steam event" });
+  }
 });
 
 app.post("/api/cctv/trigger", async (req, res) => {
