@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "system-ui", "sans-serif";
+}
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-red-500/30;
+  }
+}
+
+.glass-panel {
+  @apply bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-xl;
+}
+
+.crisis-high {
+  animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    border-color: rgba(239, 68, 68, 0.2);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0);
+  }
+  50% {
+    border-color: rgba(239, 68, 68, 0.6);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+  }
+}

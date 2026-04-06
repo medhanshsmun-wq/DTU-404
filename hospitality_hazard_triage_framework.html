@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Hospitality Hazard Triage Framework</title>
+  <style>
+    body { font-family: Helvetica, Arial, sans-serif; line-height: 1.45; color: #111; }
+    h1, h2, h3 { color: #0f2747; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; }
+    th, td { border: 1px solid #666; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #eaf0f6; }
+    code, pre { font-family: Menlo, Consolas, monospace; }
+    pre { background: #f5f7fa; padding: 10px; border: 1px solid #d9e0e6; white-space: pre-wrap; }
+    .note { background: #fff7e6; border-left: 4px solid #d48806; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Natural Disaster, Fire, and Hazard Triage Framework for Hospitality Venues</h1>
+
+  <p><strong>Purpose:</strong> This framework helps a hospitality emergency AI rank real-time incidents such as fires, floods, landslides, earthquakes, gas leaks, and similar venue hazards without blindly trusting the hazard label. It combines a venue's baseline hazard exposure with live incident severity so that, for example, a small contained fire can rank below an extreme flood if the actual danger is higher.</p>
+
+  <h2>1. Core Principle</h2>
+  <p>The AI should not rank incidents by hazard type alone. Use a two-layer model:</p>
+
+  <pre>Final Priority = (Base Hazard Prior x 0.20) + (Live Incident Score x 0.80)</pre>
+  <pre>Live Incident Score = 0.30V + 0.20S + 0.20I + 0.15H + 0.10L + 0.05P</pre>
+
+  <p>Where:</p>
+  <ul>
+    <li><strong>Base Hazard Prior</strong> = site-specific preparedness risk for that venue and season, 0-10</li>
+    <li><strong>V</strong> = Venue life-safety threat, 0-10</li>
+    <li><strong>S</strong> = Severity and spread, 0-10</li>
+    <li><strong>I</strong> = Immediate intervention need, 0-10</li>
+    <li><strong>H</strong> = Hazard context and site amplifiers, 0-10</li>
+    <li><strong>L</strong> = Location, access, and evacuation difficulty, 0-10</li>
+    <li><strong>P</strong> = Propagation or multi-person impact, 0-10</li>
+  </ul>
+
+  <div class="note"><strong>Why this matters:</strong> A small contained kitchen fire should not automatically outrank a fast-rising occupied flood event. The live incident score should dominate the final rank.</div>
+
+  <h2>2. Priority Tiers</h2>
+  <table>
+    <tr>
+      <th>Score</th>
+      <th>Tier</th>
+      <th>Color</th>
+      <th>Actions</th>
+    </tr>
+    <tr>
+      <td>8-10</td>
+      <td>Extreme</td>
+      <td>Red</td>
+      <td>External responders, zone or full evacuation, offline mesh/WebRTC, incident command</td>
+    </tr>
+    <tr>
+      <td>5-7.9</td>
+      <td>High</td>
+      <td>Orange</td>
+      <td>Emergency team, partial evacuation, external standby, route guidance</td>
+    </tr>
+    <tr>
+      <td>3-4.9</td>
+      <td>Medium</td>
+      <td>Yellow</td>
+      <td>Isolate area, investigate, prepare responders, monitor closely</td>
+    </tr>
+    <tr>
+      <td>Below 3</td>
+      <td>Low</td>
+      <td>Green</td>
+      <td>Local handling, log, continued monitoring</td>
+    </tr>
+  </table>
+
+  <h2>3. Factor Overview</h2>
+  <table>
+    <tr>
+      <th>Factor</th>
+      <th>Description</th>
+      <th>Scoring Rule Snapshot (0-10)</th>
+      <th>Example: Occupied-Floor Fire</th>
+      <th>Why it matters</th>
+    </tr>
+    <tr>
+      <td>V: Venue Life-Safety Threat</td>
+      <td>Immediate danger to occupants from smoke, water, gas, collapse, debris, and similar threats</td>
+      <td>10 = lethal conditions in occupied path; 8 = severe active hazard in occupied zone; 6 = serious localized threat; 4 = contained but active; 2 = minor stable hazard; 0 = none</td>
+      <td>8</td>
+      <td>Life safety comes first</td>
+    </tr>
+    <tr>
+      <td>S: Severity / Spread</td>
+      <td>How large the event is and how fast it is growing</td>
+      <td>10 = multi-floor or multi-building spread; 8 = floor-wide spread; 6 = one growing zone; 4 = one room/area; 2 = isolated anomaly; 0 = false alarm</td>
+      <td>7</td>
+      <td>Distinguishes small incidents from major ones</td>
+    </tr>
+    <tr>
+      <td>I: Immediate Intervention Need</td>
+      <td>Whether rescue, suppression, shutdown, or evacuation is needed now</td>
+      <td>10 = rescue or full evacuation now; 8 = emergency team now; 6 = trained team in minutes; 4 = act within 30 min; 2 = watch; 0 = none</td>
+      <td>8</td>
+      <td>Captures time to harm</td>
+    </tr>
+    <tr>
+      <td>H: Hazard Context</td>
+      <td>How much the site, season, building type, and dependencies amplify this event</td>
+      <td>10 = multiple strong amplifiers; 8 = strong site match; 6 = moderate amplifiers; 4 = modest; 2 = weak; 0 = none</td>
+      <td>6</td>
+      <td>Makes venue context matter</td>
+    </tr>
+    <tr>
+      <td>L: Location / Access Risk</td>
+      <td>How hard it is to reach people and move them to safety</td>
+      <td>10 = trapped in blocked high-risk space; 8 = isolated zone with compromised route; 6 = difficult access; 4 = standard room/wing; 2 = open area; 0 = front desk/open safe zone</td>
+      <td>7</td>
+      <td>Difficult rescues should rank higher</td>
+    </tr>
+    <tr>
+      <td>P: Propagation / Multi-Person Impact</td>
+      <td>How likely the incident is to affect more people or trigger panic</td>
+      <td>10 = mass exposure or major cascade; 8 = public area or banquet; 6 = multi-room/zone; 4 = several nearby people; 2 = isolated; 0 = fully contained</td>
+      <td>6</td>
+      <td>Captures crowd effect and cross-zone risk</td>
+    </tr>
+  </table>
+
+  <h2>4. Base Hazard Prior</h2>
+  <p><strong>Base Hazard Prior</strong> is a venue-specific score, not a universal score. A coastal resort in monsoon season should have a higher flood prior than an inland city hotel. A hill resort in heavy rain should have a higher landslide prior than a business hotel in a flat urban area.</p>
+  <p>Suggested inputs:</p>
+  <ul>
+    <li>Property geography</li>
+    <li>Season and forecast</li>
+    <li>Building type and height</li>
+    <li>Historical incidents</li>
+    <li>Occupancy profile</li>
+    <li>Known infrastructure weaknesses</li>
+  </ul>
+  <p>Examples:</p>
+  <ul>
+    <li>Fire in dense high-rise city hotel: 8.0</li>
+    <li>Flood at coastal or riverside property in monsoon: 7.5-9.0</li>
+    <li>Landslide at hill resort during heavy rain: 8.0-9.0</li>
+    <li>Earthquake at a zone IV or V property: 6.5-8.5</li>
+  </ul>
+
+  <h2>5. Hazard Context (H) as a Structured Sub-Score</h2>
+  <pre>H = min(10, B + C + D + W)</pre>
+  <p>Where:</p>
+  <ul>
+    <li><strong>B</strong> = Baseline site exposure, 0-4</li>
+    <li><strong>C</strong> = Condition-to-site match, 0-3</li>
+    <li><strong>D</strong> = Dependency fragility, 0-2</li>
+    <li><strong>W</strong> = Warning or compound-hazard modifier, 0-1</li>
+  </ul>
+
+  <table>
+    <tr>
+      <th>Component</th>
+      <th>Score</th>
+      <th>Use when</th>
+    </tr>
+    <tr>
+      <td>Baseline site exposure</td>
+      <td>0</td>
+      <td>Low-risk property with no strong hazard profile</td>
+    </tr>
+    <tr>
+      <td>Baseline site exposure</td>
+      <td>1</td>
+      <td>Standard urban low-rise venue</td>
+    </tr>
+    <tr>
+      <td>Baseline site exposure</td>
+      <td>2</td>
+      <td>High-rise, crowded banquet operations, aging utilities</td>
+    </tr>
+    <tr>
+      <td>Baseline site exposure</td>
+      <td>3</td>
+      <td>Coastal, hillside, flood-adjacent, forest-edge, chemical/storage exposure</td>
+    </tr>
+    <tr>
+      <td>Baseline site exposure</td>
+      <td>4</td>
+      <td>Repeated incidents or clear multi-hazard property</td>
+    </tr>
+    <tr>
+      <td>Condition-to-site match</td>
+      <td>0</td>
+      <td>Event not meaningfully related to site risk</td>
+    </tr>
+    <tr>
+      <td>Condition-to-site match</td>
+      <td>1</td>
+      <td>Weak match</td>
+    </tr>
+    <tr>
+      <td>Condition-to-site match</td>
+      <td>2</td>
+      <td>Strong match</td>
+    </tr>
+    <tr>
+      <td>Condition-to-site match</td>
+      <td>3</td>
+      <td>Direct match, such as heavy rain at a flood-prone basement hotel</td>
+    </tr>
+    <tr>
+      <td>Dependency fragility</td>
+      <td>0</td>
+      <td>Strong redundancy in stairs, power, comms, and access</td>
+    </tr>
+    <tr>
+      <td>Dependency fragility</td>
+      <td>1</td>
+      <td>One important weak dependency</td>
+    </tr>
+    <tr>
+      <td>Dependency fragility</td>
+      <td>2</td>
+      <td>Multiple fragile dependencies, such as one road in or poor telecom redundancy</td>
+    </tr>
+    <tr>
+      <td>Warning / compound modifier</td>
+      <td>0</td>
+      <td>No alert and no compound condition</td>
+    </tr>
+    <tr>
+      <td>Warning / compound modifier</td>
+      <td>1</td>
+      <td>Official warning, aftershock risk, storm surge, repeated trigger, and similar compounding factors</td>
+    </tr>
+  </table>
+
+  <h2>6. Detailed Factor Logic</h2>
+
+  <h3>6.1 V - Venue Life-Safety Threat</h3>
+  <pre>V = min(10, A + E + C + O)</pre>
+  <ul>
+    <li><strong>A</strong> = Active hazard intensity, 0-4</li>
+    <li><strong>E</strong> = Escalation speed, 0-3</li>
+    <li><strong>C</strong> = Critical systems compromise, 0-2</li>
+    <li><strong>O</strong> = Occupants in immediate danger, 0-3</li>
+  </ul>
+  <table>
+    <tr><th>Sub-score</th><th>Score</th><th>Guidance</th></tr>
+    <tr><td>A</td><td>0</td><td>No active hazard</td></tr>
+    <tr><td>A</td><td>1</td><td>Minor, contained event</td></tr>
+    <tr><td>A</td><td>2</td><td>Confirmed active hazard in one room or zone</td></tr>
+    <tr><td>A</td><td>3</td><td>Uncontrolled hazard in occupied area</td></tr>
+    <tr><td>A</td><td>4</td><td>Immediately lethal conditions in occupied path</td></tr>
+    <tr><td>E</td><td>0</td><td>Stable or improving</td></tr>
+    <tr><td>E</td><td>1</td><td>Slow growth</td></tr>
+    <tr><td>E</td><td>2</td><td>Worsening over minutes</td></tr>
+    <tr><td>E</td><td>3</td><td>Rapid escalation now</td></tr>
+    <tr><td>C</td><td>0</td><td>No systems affected</td></tr>
+    <tr><td>C</td><td>1</td><td>One critical system degraded</td></tr>
+    <tr><td>C</td><td>2</td><td>Multiple critical systems degraded</td></tr>
+    <tr><td>O</td><td>0</td><td>No one exposed</td></tr>
+    <tr><td>O</td><td>1</td><td>Possible exposure</td></tr>
+    <tr><td>O</td><td>2</td><td>Confirmed exposure in affected zone</td></tr>
+    <tr><td>O</td><td>3</td><td>Trapped or directly endangered occupants</td></tr>
+  </table>
+  <p><strong>Examples:</strong> smoke in an escape corridor, water above knee level and rising, structural cracking after an earthquake, debris strike from a landslide, or dangerous gas concentration in an occupied wing.</p>
+
+  <h3>6.2 S - Severity / Spread</h3>
+  <pre>S = min(10, Z + M + D + T)</pre>
+  <ul>
+    <li><strong>Z</strong> = Zone spread, 0-4</li>
+    <li><strong>M</strong> = Magnitude from sensors or feeds, 0-2</li>
+    <li><strong>D</strong> = Damage signals, 0-3</li>
+    <li><strong>T</strong> = Trend, 0-1</li>
+  </ul>
+  <table>
+    <tr><th>Sub-score</th><th>Score</th><th>Guidance</th></tr>
+    <tr><td>Z</td><td>0</td><td>None</td></tr>
+    <tr><td>Z</td><td>1</td><td>Single point</td></tr>
+    <tr><td>Z</td><td>2</td><td>Single room or space</td></tr>
+    <tr><td>Z</td><td>3</td><td>One floor or zone</td></tr>
+    <tr><td>Z</td><td>4</td><td>Multi-floor or multi-building</td></tr>
+    <tr><td>M</td><td>0</td><td>Weak reading</td></tr>
+    <tr><td>M</td><td>1</td><td>Moderate abnormality</td></tr>
+    <tr><td>M</td><td>2</td><td>Strong abnormality</td></tr>
+    <tr><td>D</td><td>0</td><td>No damage</td></tr>
+    <tr><td>D</td><td>1</td><td>Light damage</td></tr>
+    <tr><td>D</td><td>2</td><td>Clear operational damage</td></tr>
+    <tr><td>D</td><td>3</td><td>Structural or severe physical damage</td></tr>
+    <tr><td>T</td><td>0</td><td>Stable or reducing</td></tr>
+    <tr><td>T</td><td>1</td><td>Clearly worsening</td></tr>
+  </table>
+
+  <h3>6.3 I - Immediate Intervention Need</h3>
+  <pre>I = min(10, Li + Ri + Ci)</pre>
+  <ul>
+    <li><strong>Li</strong> = Lifesaving action need, 0-6</li>
+    <li><strong>Ri</strong> = Risk if delayed, 0-3</li>
+    <li><strong>Ci</strong> = Complexity or response level, 0-2</li>
+  </ul>
+  <p><strong>Suggested Li additions, capped at 6:</strong></p>
+  <ul>
+    <li>+3 rescue or extraction of trapped occupants needed</li>
+    <li>+2 immediate evacuation needed</li>
+    <li>+2 immediate shutdown needed, such as gas, power, or water isolation</li>
+    <li>+1 suppression or smoke control action needed now</li>
+    <li>+1 immediate medical support needed for exposed guests or staff</li>
+  </ul>
+  <table>
+    <tr><th>Sub-score</th><th>Score</th><th>Guidance</th></tr>
+    <tr><td>Ri</td><td>0</td><td>Delay above 60 minutes acceptable</td></tr>
+    <tr><td>Ri</td><td>1</td><td>Act within 30-60 minutes</td></tr>
+    <tr><td>Ri</td><td>2</td><td>Act within 10-30 minutes</td></tr>
+    <tr><td>Ri</td><td>3</td><td>Harm likely in under 10 minutes</td></tr>
+    <tr><td>Ci</td><td>0</td><td>Internal handling only</td></tr>
+    <tr><td>Ci</td><td>1</td><td>Trained emergency team required</td></tr>
+    <tr><td>Ci</td><td>2</td><td>External responders or multi-agency response required</td></tr>
+  </table>
+
+  <h3>6.4 L - Location / Access Risk</h3>
+  <pre>L = min(10, Al + Hl + Rl)</pre>
+  <ul>
+    <li><strong>Al</strong> = Access difficulty, 0-4</li>
+    <li><strong>Hl</strong> = Hazard on route, 0-3</li>
+    <li><strong>Rl</strong> = Responder time, 0-3</li>
+  </ul>
+  <table>
+    <tr><th>Sub-score</th><th>Score</th><th>Guidance</th></tr>
+    <tr><td>Al</td><td>0</td><td>Open safe area</td></tr>
+    <tr><td>Al</td><td>1</td><td>Standard room or open corridor</td></tr>
+    <tr><td>Al</td><td>2</td><td>Locked room or restricted zone</td></tr>
+    <tr><td>Al</td><td>3</td><td>High floor, basement, rooftop, or narrow passage</td></tr>
+    <tr><td>Al</td><td>4</td><td>Elevator, shaft, service space, or collapsed route</td></tr>
+    <tr><td>Hl</td><td>0</td><td>Safe path</td></tr>
+    <tr><td>Hl</td><td>1</td><td>Wet, cluttered, or low visibility path</td></tr>
+    <tr><td>Hl</td><td>2</td><td>Smoke, standing water, or debris on route</td></tr>
+    <tr><td>Hl</td><td>3</td><td>Active route hazard or blocked egress</td></tr>
+    <tr><td>Rl</td><td>0</td><td>Under 1 minute</td></tr>
+    <tr><td>Rl</td><td>1</td><td>1-3 minutes</td></tr>
+    <tr><td>Rl</td><td>2</td><td>3-5 minutes</td></tr>
+    <tr><td>Rl</td><td>3</td><td>Over 5 minutes or blocked</td></tr>
+  </table>
+
+  <h3>6.5 P - Propagation / Multi-Person Impact</h3>
+  <pre>P = min(10, Np + Cp + Ep)</pre>
+  <ul>
+    <li><strong>Np</strong> = Number of people at risk, 0-4</li>
+    <li><strong>Cp</strong> = Cross-zone or cascade risk, 0-3</li>
+    <li><strong>Ep</strong> = Escalation or panic potential, 0-3</li>
+  </ul>
+  <table>
+    <tr><th>Sub-score</th><th>Score</th><th>Guidance</th></tr>
+    <tr><td>Np</td><td>0</td><td>Single isolated person or room</td></tr>
+    <tr><td>Np</td><td>1</td><td>2-3 nearby people</td></tr>
+    <tr><td>Np</td><td>2</td><td>Small group or one room cluster</td></tr>
+    <tr><td>Np</td><td>3</td><td>10-50 in zone</td></tr>
+    <tr><td>Np</td><td>4</td><td>More than 50 in affected zone</td></tr>
+    <tr><td>Cp</td><td>0</td><td>No spread or cascade expected</td></tr>
+    <tr><td>Cp</td><td>1</td><td>Limited adjacent spread</td></tr>
+    <tr><td>Cp</td><td>2</td><td>Cross-zone or utility spread possible</td></tr>
+    <tr><td>Cp</td><td>3</td><td>Major cross-floor or cross-building cascade possible</td></tr>
+    <tr><td>Ep</td><td>0</td><td>Minimal visibility</td></tr>
+    <tr><td>Ep</td><td>1</td><td>Visible but controlled</td></tr>
+    <tr><td>Ep</td><td>2</td><td>Public distress or likely crowd alarm</td></tr>
+    <tr><td>Ep</td><td>3</td><td>High chance of panic or stampede</td></tr>
+  </table>
+
+  <h2>7. Hard Override Rules</h2>
+  <p>The formula is useful, but safety systems also need deterministic minimum-score rules.</p>
+  <ul>
+    <li>Smoke in an escape corridor - minimum score 8.5</li>
+    <li>Water above knee level and rising in occupied zone - minimum score 8.5</li>
+    <li>Structural collapse, active landslide impact, or major gas leak - minimum score 9.0</li>
+    <li>Confirmed trapped occupants - minimum score 9.0</li>
+    <li>Multiple exits blocked on an occupied floor - minimum score 8.5</li>
+    <li>Contained event with no spread and no occupant exposure - cap near 4.5 unless worsening</li>
+  </ul>
+
+  <h2>8. How the AI Becomes Aware</h2>
+  <p>The system should fuse signals from multiple sources:</p>
+  <ul>
+    <li><strong>Building systems:</strong> smoke detectors, heat sensors, sprinkler flow, water level sensors, gas detectors, structural tilt or vibration, elevator and door status, power and backup status</li>
+    <li><strong>External feeds:</strong> weather alerts, flood alerts, seismic alerts, storm advisories, road closures</li>
+    <li><strong>Occupancy and context:</strong> checked-in rooms, banquet attendance, staff locations, special-needs flags, floor plans, exit maps</li>
+    <li><strong>Guest and staff input:</strong> SOS buttons, panic buttons, emergency extension, app reports, staff confirmations</li>
+    <li><strong>Vision and audio intelligence:</strong> smoke visibility, crowding, debris, water accumulation, distress sounds, blocked corridor detection</li>
+    <li><strong>Network health:</strong> internet status, cellular quality, local Wi-Fi and mesh availability, UPS and edge server status</li>
+  </ul>
+
+  <h2>9. Worked Example: Occupied-Floor Fire in a Hotel Tower</h2>
+  <h3>9.1 Incident Awareness</h3>
+  <p>A fire starts in a service pantry on Floor 12 of a city hotel at 9:18 PM.</p>
+  <p>Signals received:</p>
+  <ul>
+    <li>Smoke detector alarm on Floor 12</li>
+    <li>Sprinkler flow in pantry</li>
+    <li>Corridor camera detects falling visibility</li>
+    <li>Staff app confirms smell of smoke</li>
+    <li>One stairwell door sensor shows heavy use and congestion</li>
+    <li>PMS shows 73 guests and 12 staff in the affected stack</li>
+    <li>Internet is down, but the hotel LAN and local emergency hub are still alive</li>
+  </ul>
+
+  <h3>9.2 Example Incident Object</h3>
+  <pre>{
+  "type": "fire",
+  "site": "Hotel Tower, Floor 12 Service Pantry",
+  "time": "21:18",
+  "signals": ["smoke_alarm", "sprinkler_flow", "camera_smoke", "staff_confirmation"],
+  "occupancy": {
+    "affected_floors": [11, 12, 13],
+    "guests": 73,
+    "staff": 12
+  },
+  "access": {
+    "stairwell_b": "congested",
+    "elevators": "to be disabled"
+  },
+  "network": {
+    "internet": "down",
+    "local_hub": "up",
+    "mesh_mode": "available"
+  }
+}</pre>
+
+  <h3>9.3 Factor Scoring</h3>
+  <ul>
+    <li><strong>V</strong> = 8. Active smoke in occupied corridor, worsening over minutes, one egress path compromised, occupants in direct exposure zone.</li>
+    <li><strong>S</strong> = 7. Spread beyond origin room into corridor, visibility deteriorating, one floor stack affected and growing.</li>
+    <li><strong>I</strong> = 8. Partial floor evacuation needed now, emergency team needed immediately, delay increases entrapment risk.</li>
+    <li><strong>H</strong> = 6. High-rise occupied hotel, nighttime occupancy, internet outage increases coordination dependency.</li>
+    <li><strong>L</strong> = 7. Upper-middle floors, one route degraded, elevators should not be used normally.</li>
+    <li><strong>P</strong> = 6. Dozens of people in affected stack, panic possible, HVAC and corridor spread possible.</li>
+  </ul>
+
+  <h3>9.4 Score Calculation</h3>
+  <pre>Live Incident Score = 0.30(8) + 0.20(7) + 0.20(8) + 0.15(6) + 0.10(7) + 0.05(6)</pre>
+  <pre>Live Incident Score = 2.4 + 1.4 + 1.6 + 0.9 + 0.7 + 0.3 = 7.3</pre>
+  <p>Assume <strong>Base Hazard Prior</strong> for fire at this high-rise hotel is <strong>8.0</strong>.</p>
+  <pre>Final Priority = 0.20(8.0) + 0.80(7.3) = 1.6 + 5.84 = 7.44</pre>
+  <p>But a hard override applies:</p>
+  <ul>
+    <li>Smoke in an escape corridor - minimum 8.5</li>
+  </ul>
+  <p><strong>Final Priority = 8.5 / 10</strong><br><strong>Tier = Extreme</strong><br><strong>Color = Red</strong></p>
+
+  <h2>10. Immediate Orchestration Steps</h2>
+  <ol>
+    <li><strong>Alerting:</strong> notify security, engineering, floor wardens, medic team, and external responders if configured.</li>
+    <li><strong>Guest communication:</strong> send offline alerts to devices on Floors 11-13 with color-coded floor-plan evacuation routes and blocked paths.</li>
+    <li><strong>Mesh / WebRTC mode:</strong> if internet is down, shift to local signaling and local mesh to preserve room-to-command and staff-to-staff communication.</li>
+    <li><strong>Nearest-aid routing:</strong> route nearest staff to extinguishers, hose reels, stair doors, AEDs, first-aid points, and room-check duties.</li>
+    <li><strong>Building controls:</strong> disable guest elevator use, prioritize emergency movement, manage smoke doors if configured, preserve power to emergency systems.</li>
+    <li><strong>Continuous re-ranking:</strong> recompute every 15-30 seconds. Downgrade if suppression succeeds and the corridor clears. Escalate if trapped guests are detected.</li>
+  </ol>
+
+  <h2>11. Small Fire vs Extreme Flood Sanity Check</h2>
+  <table>
+    <tr>
+      <th>Scenario</th>
+      <th>Base Prior</th>
+      <th>Live Score</th>
+      <th>Final Priority</th>
+      <th>Tier</th>
+      <th>Why</th>
+    </tr>
+    <tr>
+      <td>Small pantry fire, contained, no smoke spread, no guest exposure</td>
+      <td>8.0</td>
+      <td>2.8</td>
+      <td>3.8</td>
+      <td>Medium</td>
+      <td>Fire label has a high baseline, but the incident is controlled</td>
+    </tr>
+    <tr>
+      <td>Basement or lobby flood, water rising fast, exits blocked, occupied zone</td>
+      <td>7.5</td>
+      <td>8.8</td>
+      <td>8.5</td>
+      <td>Extreme</td>
+      <td>Flood baseline is lower, but the real-time danger is much higher</td>
+    </tr>
+  </table>
+
+  <h2>12. Reporting Format</h2>
+  <p>Every incident should be reported with a score, explanation, and action.</p>
+  <pre>Incident: Fire
+Location: Floor 12 Service Pantry and Corridor
+Priority: 8.5/10
+Tier: Extreme
+Confidence: 0.88
+
+Why ranked high:
+- Smoke detected in occupied escape corridor
+- 85 people in affected floor stack
+- One stairwell congested or degraded
+- Event spreading beyond origin point
+- Internet unavailable, local mesh active
+
+Immediate actions:
+- Push red evacuation popup to Floors 11-13
+- Route guests to Stairwell A only
+- Dispatch fire team, security, and medic team
+- Disable guest elevator access
+- Alert fire brigade and ambulance
+- Recompute in 20 seconds</pre>
+
+  <h2>13. Recommended Product Behavior</h2>
+  <ul>
+    <li>Use deterministic rules for thresholds, overrides, evacuation logic, and responder escalation.</li>
+    <li>Use AI for summarization, ranking assistance, and natural-language reporting.</li>
+    <li>Show current priority score, tier, confidence, top reasons, next actions, and time since last update.</li>
+    <li>Re-rank all active incidents continuously rather than relying on one-time labels.</li>
+  </ul>
+
+  <p><strong>Summary:</strong> The right system does not ask, "Is fire usually more dangerous than flood?" It asks, "Which incident is most dangerous right now at this venue, to these people, given current conditions and access constraints?"</p>
+</body>
+</html>
