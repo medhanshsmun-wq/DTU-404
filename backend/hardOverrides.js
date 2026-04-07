@@ -32,11 +32,24 @@ const OVERRIDE_RULES = [
     test: (incident) => {
       const desc = (incident.rawDescription || "").toLowerCase();
       const signals = incident.sensorSignals || {};
-      const waterDepthStr = (signals.waterDepth || "").toLowerCase();
-      const hasHighWater = waterDepthStr.includes("0.5") || waterDepthStr.includes("0.6") || waterDepthStr.includes("0.7") || waterDepthStr.includes("0.8") || waterDepthStr.includes("0.9") || waterDepthStr.includes("1.");
-      const isRising = waterDepthStr.includes("rising") || desc.includes("rising");
+      
+      // Handle numeric waterLevel (from optimized pipeline) and string waterDepth (legacy)
+      let waterLevel = 0;
+      if (typeof signals.waterLevel === "number") {
+        waterLevel = signals.waterLevel;
+      } else if (signals.waterLevel) {
+        waterLevel = parseFloat(String(signals.waterLevel).replace(/m$/i, "")) || 0;
+      } else if (signals.waterDepth) {
+        const depthStr = String(signals.waterDepth).toLowerCase();
+        waterLevel = parseFloat(depthStr) || 0;
+      }
+      
+      const hasHighWater = waterLevel >= 0.4;
+      const isRising = desc.includes("rising") || (typeof signals.waterDepth === "string" && signals.waterDepth.includes("rising"));
+      
       return (
         (hasHighWater && isRising) ||
+        (hasHighWater && desc.includes("water")) ||
         (desc.includes("water") && desc.includes("knee") && desc.includes("rising")) ||
         (desc.includes("flood") && desc.includes("rising") && (desc.includes("blocked") || desc.includes("trapped")))
       );

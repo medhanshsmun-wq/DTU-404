@@ -1,16 +1,19 @@
 import cv2
 import time
-import requests
 import json
+import hashlib
+import threading
+from urllib.request import Request, urlopen
+from urllib.error import URLError
 from collections import deque
 from detector import MockDetector
 
 # Configuration
-FPS_TARGET = 10
+FPS_TARGET = 5  # Reduced from 10 — mock detector doesn't need high FPS
 FRAME_DELAY = int(1000 / FPS_TARGET)
 NODE_SERVER_URL = "http://localhost:3001/api/cctv/stream_event"
 BUFFER_SECONDS = 5
-HYSTERESIS_BUFFER_SIZE = FPS_TARGET * BUFFER_SECONDS  # 50 frames
+HYSTERESIS_BUFFER_SIZE = FPS_TARGET * BUFFER_SECONDS  # 25 frames
 
 class TemporalBuffer:
     def __init__(self, size):
@@ -26,17 +29,74 @@ class TemporalBuffer:
         `required_ratio` of the recent frames.
         """
         if len(self.history) < self.size // 2:
-            return False # Not enough data yet
+            return False  # Not enough data yet
         
         count = sum(1 for s in self.history if s.get(key, 0) > threshold)
         return count / len(self.history) >= required_ratio
 
     def get_average(self, key):
-        if not self.history: return 0
+        if not self.history:
+            return 0
         return sum(s.get(key, 0) for s in self.history) / len(self.history)
 
+
+class AsyncDispatcher:
+    """Non-blocking HTTP dispatcher using threads."""
+    
+    def __init__(self, url):
+        self.url = url
+        self._pending = False
+        self._last_response = None
+        self._lock = threading.Lock()
+    
+    @property
+    def is_pending(self):
+        return self._pending
+    
+    @property
+    def last_response(self):
+        return self._last_response
+    
+    def dispatch(self, payload, on_success=None, on_error=None):
+        """Fire-and-forget HTTP POST in a background thread."""
+        with self._lock:
+            if self._pending:
+                return  # Don't stack up requests
+            self._pending = True
+        
+        def _send():
+            try:
+                data = json.dumps(payload).encode("utf-8")
+                req = Request(
+                    self.url,
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urlopen(req, timeout=10) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                    self._last_response = body
+                    if on_success:
+                        on_success(body)
+            except (URLError, Exception) as e:
+                if on_error:
+                    on_error(e)
+            finally:
+                with self._lock:
+                    self._pending = False
+        
+        t = threading.Thread(target=_send, daemon=True)
+        t.start()
+
+
+def compute_state_hash(payload):
+    """Hash the hazard state to detect actual changes."""
+    key = json.dumps(payload.get("sensorSignals", {}), sort_keys=True)
+    return hashlib.md5(key.encode()).hexdigest()[:12]
+
+
 def main():
-    print("🎥 Starting Hybrid CCTV Pipeline...")
+    print("🎥 Starting Hybrid CCTV Pipeline (Optimized)...")
     print("🔌 Connecting to Webcam...")
     
     cap = cv2.VideoCapture(0)
@@ -46,11 +106,15 @@ def main():
 
     detector = MockDetector()
     buffer = TemporalBuffer(HYSTERESIS_BUFFER_SIZE)
+    dispatcher = AsyncDispatcher(NODE_SERVER_URL)
     
     last_alert_time = 0
-    ALERT_COOLDOWN = 10 # Only send alert every 10 seconds per incident
+    last_state_hash = None
+    ALERT_COOLDOWN = 10  # Minimum seconds between alerts
+    dispatch_count = 0
 
     print("✅ System Ready. Press 'q' to quit.")
+    print(f"📊 FPS Target: {FPS_TARGET} | Buffer: {BUFFER_SECONDS}s | Cooldown: {ALERT_COOLDOWN}s")
 
     while True:
         ret, frame = cap.read()
@@ -65,7 +129,6 @@ def main():
         buffer.add(signals)
 
         # 3. Apply Stateful Temporal Logic
-        # e.g.: Smoke > 0.6 in 60% of the last 5 seconds?
         is_smoke_critical = buffer.check_threshold("smoke_score", 0.6, 0.6)
         is_water_critical = buffer.check_threshold("water_level", 0.4, 0.6)
         
@@ -75,16 +138,17 @@ def main():
 
         is_incident = is_smoke_critical or current_exit_blocked or is_water_critical
 
-        # 4. Dispatch Alert (with cooldown so we don't spam the server)
+        # 4. Dispatch Alert (with cooldown + state-change dedup)
         current_time = time.time()
         if is_incident and (current_time - last_alert_time > ALERT_COOLDOWN):
-            print("\n🚨 TEMPORAL THRESHOLD BREACHED! Sending incident to Node Backend...")
-            
-            # Construct semantic description for the Node backend to process
+            # Build payload with NUMERIC values (not strings)
             issues = []
-            if is_smoke_critical: issues.append("dense smoke")
-            if current_exit_blocked: issues.append("a blocked exit")
-            if is_water_critical: issues.append("rapidly rising water")
+            if is_smoke_critical:
+                issues.append("dense smoke")
+            if current_exit_blocked:
+                issues.append("a blocked exit")
+            if is_water_critical:
+                issues.append("rapidly rising water")
             
             description = f"CCTV detected {', '.join(issues)} in the Main Lobby area. There are approximately {avg_people} people visible in the frame."
 
@@ -93,27 +157,47 @@ def main():
                 "location": "Main Lobby Camera A",
                 "description": description,
                 "sensorSignals": {
-                    "smokeDensity": f"{buffer.get_average('smoke_score'):.2f}",
-                    "occupancyCount": str(avg_people),
-                    "exitBlocked": str(current_exit_blocked),
-                    "waterLevel": f"{buffer.get_average('water_level'):.2f}m"
+                    "smokeDensity": round(buffer.get_average("smoke_score"), 3),
+                    "occupancyCount": avg_people,
+                    "exitBlocked": current_exit_blocked,
+                    "waterLevel": round(buffer.get_average("water_level"), 3),
                 }
             }
 
-            try:
-                # Send to Node endpoint
-                res = requests.post(NODE_SERVER_URL, json=payload)
-                if res.status_code == 200:
-                    print(f"✅ Successfully dispatched! Server responded: Incident {res.json().get('priorityBand')} Priority")
-                    last_alert_time = current_time
-                    
-                    # Display "ALERT SENT" on frame for feedback
-                    cv2.putText(frame, "ALERT SENT TO BACKEND", (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
-            except Exception as e:
-                print(f"⚠️ Warning: Could not connect to Node server ({NODE_SERVER_URL})")
+            # State-change dedup: only dispatch if the hazard signature changed
+            state_hash = compute_state_hash(payload)
+            if state_hash != last_state_hash:
+                last_state_hash = state_hash
+                dispatch_count += 1
+
+                def on_success(resp):
+                    band = resp.get("priorityBand", "?")
+                    latency = resp.get("latencyMs", "?")
+                    print(f"  ✅ Dispatched #{dispatch_count} → {band} Priority ({latency}ms backend)")
+
+                def on_error(err):
+                    print(f"  ⚠️ Dispatch failed: {err}")
+
+                print(f"\n🚨 THRESHOLD BREACHED! Dispatching event #{dispatch_count}...")
+                dispatcher.dispatch(payload, on_success=on_success, on_error=on_error)
+                last_alert_time = current_time
+
+                # Show visual feedback
+                cv2.putText(frame, "DISPATCHING...", (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+            else:
+                # Same state as before — skip
+                cv2.putText(frame, "INCIDENT ACTIVE (no change)", (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
+
+        # Show dispatch status on HUD
+        if dispatcher.last_response:
+            resp = dispatcher.last_response
+            band = resp.get("priorityBand", "?")
+            latency = resp.get("latencyMs", "?")
+            h, _, _ = frame.shape
+            cv2.putText(frame, f"Last: {band} | {latency}ms", (10, h - 45), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 200), 1)
 
         # 5. Display Frame
-        cv2.imshow("Hybrid CCTV Pipeline [Hackathon MVP]", frame)
+        cv2.imshow("Hybrid CCTV Pipeline [Optimized]", frame)
 
         # 6. Read Keyboard Commands
         key = cv2.waitKey(FRAME_DELAY) & 0xFF
@@ -124,6 +208,7 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
+    print(f"\n📊 Session Stats: {dispatch_count} events dispatched")
 
 if __name__ == "__main__":
     main()
