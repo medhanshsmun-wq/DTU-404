@@ -1,12 +1,14 @@
 // ============================================================
-// HARD OVERRIDE RULES — Deterministic Safety Clamps
+// HARD OVERRIDE RULES — Unified Priority Engine
 // ============================================================
-// These run AFTER the formula. They enforce minimum/maximum
-// priority scores based on specific signal conditions.
+// Deterministic minimum scores when certain high-risk conditions
+// are present. Rules run AFTER the formula.
 //
 // Philosophy: "AI helps interpret, RULES decide escalation."
 // No formula miscalculation should ever under-rank a
 // life-threatening condition.
+//
+// Domains: Medical, Hazard, Infrastructure/Crowd
 // ============================================================
 
 /**
@@ -14,6 +16,76 @@
  * Returns { minPriority, maxPriority, reason } or null if no match.
  */
 const OVERRIDE_RULES = [
+  // ────────────────────────────────────────────────────────
+  // MEDICAL OVERRIDES (from spec Section 7)
+  // ────────────────────────────────────────────────────────
+  {
+    name: "No pulse or no breathing",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        desc.includes("no pulse") ||
+        desc.includes("not breathing") ||
+        desc.includes("cardiac arrest") ||
+        desc.includes("unresponsive") && desc.includes("no breath")
+      );
+    },
+    minPriority: 10.0,
+    reason: "No pulse or no breathing detected — maximum priority enforced",
+  },
+  {
+    name: "Airway compromise or severe anaphylaxis",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        desc.includes("airway") && (desc.includes("block") || desc.includes("compromise") || desc.includes("obstruct")) ||
+        desc.includes("anaphylaxis") && (desc.includes("severe") || desc.includes("throat") || desc.includes("swelling"))
+      );
+    },
+    minPriority: 9.5,
+    reason: "Airway compromise or severe anaphylaxis — minimum 9.5 enforced",
+  },
+  {
+    name: "Major uncontrolled bleeding",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        (desc.includes("bleeding") || desc.includes("hemorrhage") || desc.includes("blood")) &&
+        (desc.includes("major") || desc.includes("uncontrolled") || desc.includes("severe") || desc.includes("profuse"))
+      );
+    },
+    minPriority: 9.0,
+    reason: "Major uncontrolled bleeding — minimum 9.0 enforced",
+  },
+  {
+    name: "Stroke red flags with acute onset",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        desc.includes("stroke") &&
+        (desc.includes("acute") || desc.includes("sudden") || desc.includes("face droop") || desc.includes("slurred"))
+      );
+    },
+    minPriority: 8.5,
+    reason: "Stroke red flags with acute onset — minimum 8.5 enforced",
+  },
+  {
+    name: "Prolonged or repeated seizure",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        desc.includes("seizure") &&
+        (desc.includes("5 minute") || desc.includes("prolonged") || desc.includes("repeated") ||
+         desc.includes("status epilepticus") || desc.includes("continuous"))
+      );
+    },
+    minPriority: 9.0,
+    reason: "Seizure longer than 5 minutes or repeated seizure — minimum 9.0 enforced",
+  },
+
+  // ────────────────────────────────────────────────────────
+  // HAZARD OVERRIDES (from spec Section 7)
+  // ────────────────────────────────────────────────────────
   {
     name: "Smoke in escape corridor",
     test: (incident) => {
@@ -32,7 +104,7 @@ const OVERRIDE_RULES = [
     test: (incident) => {
       const desc = (incident.rawDescription || "").toLowerCase();
       const signals = incident.sensorSignals || {};
-      
+
       // Handle numeric waterLevel (from optimized pipeline) and string waterDepth (legacy)
       let waterLevel = 0;
       if (typeof signals.waterLevel === "number") {
@@ -43,10 +115,10 @@ const OVERRIDE_RULES = [
         const depthStr = String(signals.waterDepth).toLowerCase();
         waterLevel = parseFloat(depthStr) || 0;
       }
-      
+
       const hasHighWater = waterLevel >= 0.4;
       const isRising = desc.includes("rising") || (typeof signals.waterDepth === "string" && signals.waterDepth.includes("rising"));
-      
+
       return (
         (hasHighWater && isRising) ||
         (hasHighWater && desc.includes("water")) ||
@@ -58,7 +130,7 @@ const OVERRIDE_RULES = [
     reason: "Water above knee level and rising in occupied zone — minimum priority enforced",
   },
   {
-    name: "Structural collapse or landslide",
+    name: "Structural collapse or active landslide",
     test: (incident) => {
       const desc = (incident.rawDescription || "").toLowerCase();
       return (
@@ -66,8 +138,8 @@ const OVERRIDE_RULES = [
         desc.includes("structural failure") || desc.includes("building damage")
       );
     },
-    minPriority: 9.0,
-    reason: "Structural collapse or landslide detected — minimum priority enforced",
+    minPriority: 9.5,  // Increased from 9.0 per spec
+    reason: "Structural collapse or active landslide — minimum 9.5 enforced",
   },
   {
     name: "Confirmed trapped person",
@@ -96,6 +168,88 @@ const OVERRIDE_RULES = [
     minPriority: 7.0,
     reason: "Moderate earthquake (M≥4.0) detected near venue — elevated priority enforced",
   },
+  {
+    name: "Confirmed gas leak with symptoms or ignition risk",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        desc.includes("gas leak") &&
+        (desc.includes("symptom") || desc.includes("ignition") || desc.includes("smell") || desc.includes("evacuate"))
+      );
+    },
+    minPriority: 9.0,
+    reason: "Confirmed gas leak with symptoms or ignition risk — minimum 9.0 enforced",
+  },
+
+  // ────────────────────────────────────────────────────────
+  // INFRASTRUCTURE / CROWD OVERRIDES (from spec Section 7)
+  // ────────────────────────────────────────────────────────
+  {
+    name: "Crowd crush indicators at exit",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        (desc.includes("crowd") && desc.includes("crush")) ||
+        (desc.includes("stampede"))
+      );
+    },
+    minPriority: 9.5,
+    reason: "Crowd crush indicators at exit — minimum 9.5 enforced",
+  },
+  {
+    name: "All egress blocked in occupied zone",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      const signals = incident.sensorSignals || {};
+      return (
+        (desc.includes("all") && desc.includes("exit") && desc.includes("blocked")) ||
+        (desc.includes("egress") && desc.includes("blocked")) ||
+        (signals.blockedExits && parseInt(signals.blockedExits) >= 3)
+      );
+    },
+    minPriority: 9.5,
+    reason: "All egress blocked in occupied zone — minimum 9.5 enforced",
+  },
+  {
+    name: "Full lockout during evacuation or fire",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        desc.includes("lockout") &&
+        (desc.includes("evacuation") || desc.includes("fire") || desc.includes("emergency"))
+      );
+    },
+    minPriority: 9.0,
+    reason: "Full keyless lockout during evacuation or fire — minimum 9.0 enforced",
+  },
+  {
+    name: "Cyber-physical BMS attack during occupancy",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        (desc.includes("cyber") && desc.includes("attack")) ||
+        (desc.includes("bms") && (desc.includes("compromise") || desc.includes("hack") || desc.includes("attack")))
+      );
+    },
+    minPriority: 9.0,
+    reason: "Cyber-physical control of alarms or BMS during occupancy — minimum 9.0 enforced",
+  },
+  {
+    name: "Multi-elevator entrapment with medical distress",
+    test: (incident) => {
+      const desc = (incident.rawDescription || "").toLowerCase();
+      return (
+        desc.includes("elevator") && desc.includes("trap") &&
+        (desc.includes("medical") || desc.includes("distress") || desc.includes("panic") || desc.includes("breathing"))
+      );
+    },
+    minPriority: 8.5,
+    reason: "Multi-elevator entrapment with medical distress — minimum 8.5 enforced",
+  },
+
+  // ────────────────────────────────────────────────────────
+  // CAPS (maximum limits for contained situations)
+  // ────────────────────────────────────────────────────────
   {
     name: "Contained fire — cap",
     test: (incident) => {

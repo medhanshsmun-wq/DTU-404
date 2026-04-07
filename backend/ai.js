@@ -1,14 +1,22 @@
 // ============================================================
-// AI MODULE — Optimized
+// AI MODULE — Unified Priority Engine
 // ============================================================
 // AI is used for:
-//   1. Classifying hazard type (manual/text incidents)
-//   2. Estimating live factor scores (0-10)
+//   1. Classifying incident type and domain
+//   2. Estimating V/S/I/H/L/P factor scores (0-10)
 //   3. Generating explanations & recommended actions
 //   4. Estimating confidence
 //
 // CCTV hot-path uses DETERMINISTIC classifier (no LLM).
 // LLM enrichment runs ASYNC in background after scoring.
+//
+// Factor Schema (Unified Priority Engine Spec):
+//   V = Vital / Life Threat
+//   S = Severity / Spread
+//   I = Immediate Intervention Need
+//   H = Historical / Hazard Context
+//   L = Location / Access Risk
+//   P = Propagation / Population Impact
 // ============================================================
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -18,10 +26,19 @@ import { llmCache, cvCache, LRUCache } from "./cache.js";
 dotenv.config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const GEMINI_TEXT_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+const GEMINI_VISION_MODEL = process.env.GEMINI_VISION_MODEL || GEMINI_TEXT_MODEL;
 
 // ── Deterministic CV Classifier (no LLM, ~1ms) ─────────────
 
 const CV_HAZARD_RULES = [
+  {
+    // Compound: smoke + blocked exit + water
+    test: (s) => s.smokeDensity > 0.5 && s.exitBlocked === true && s.waterLevel > 0.3,
+    hazardType: "Fires and Hazards",
+    isCompound: true,
+    compoundTypes: ["Fires and Hazards", "Flood", "Crowd Panic"],
+  },
   {
     // Compound: smoke + blocked exit
     test: (s) => s.smokeDensity > 0.5 && s.exitBlocked === true,
@@ -76,7 +93,7 @@ const CV_HAZARD_RULES = [
 /**
  * Deterministic classifier for CV sensor signals.
  * Runs in ~1ms. No LLM call.
- * Returns the same shape as a Gemini response.
+ * Returns V/S/I/H/L/P factors per the Unified Priority Engine Spec.
  */
 export function classifyFromCVSignals(sensorSignals, description = "") {
   const s = normalizeSensorSignals(sensorSignals);
@@ -88,29 +105,8 @@ export function classifyFromCVSignals(sensorSignals, description = "") {
     compoundTypes: [],
   };
 
-  // Compute live factors from raw numeric signals
-  const liveFactors = {
-    currentSeverity: clamp(
-      Math.max(s.smokeDensity * 10, s.waterLevel * 8, s.exitBlocked ? 7 : 0),
-      0,
-      10
-    ),
-    peopleAtRisk: clamp(Math.min(s.occupancyCount / 5, 10), 0, 10),
-    timeToHarm: computeTimeToHarm(s),
-    spreadPotential: clamp(
-      Math.max(s.smokeDensity * 8, s.waterLevel * 6),
-      0,
-      10
-    ),
-    evacuationDifficulty: clamp(
-      (s.exitBlocked ? 8 : 0) +
-        s.smokeDensity * 3 +
-        Math.min(s.occupancyCount / 20, 3),
-      0,
-      10
-    ),
-    meshOfflineNeed: clamp(s.smokeDensity > 0.7 ? 5 : 2, 0, 10),
-  };
+  // Compute V/S/I/H/L/P using hazard adapter sub-score formulas
+  const factors = computeHazardFactorsFromCV(s, rule);
 
   // Build explanation bullets from detected signals
   const explanation = buildExplanation(s, rule);
@@ -120,11 +116,112 @@ export function classifyFromCVSignals(sensorSignals, description = "") {
     hazardType: rule.hazardType,
     isCompound: rule.isCompound,
     compoundTypes: rule.compoundTypes,
-    liveFactors,
-    confidence: 0.85, // deterministic classifier has fixed high confidence
+    liveFactors: factors,
+    confidence: 0.85,
     explanation,
     recommendedActions,
   };
+}
+
+/**
+ * Compute V/S/I/H/L/P from CV sensor signals using the Hazard Adapter.
+ * Maps raw sensor readings to the spec's sub-score formulas.
+ */
+function computeHazardFactorsFromCV(s, rule) {
+  // V = Vital/Life Threat: min(10, A + E + C + O)
+  //   A = active hazard intensity (0-4)
+  //   E = escalation speed (0-3)
+  //   C = critical systems compromise (0-2)
+  //   O = occupants in immediate danger (0-3)
+  const A = clamp(Math.max(s.smokeDensity * 4, s.waterLevel * 3), 0, 4);
+  const E_v = clamp(
+    s.smokeDensity > 0.7 ? 3 : s.smokeDensity > 0.4 ? 2 : s.waterLevel > 0.5 ? 2 : 0,
+    0, 3
+  );
+  const C_v = clamp(s.exitBlocked ? 2 : s.smokeDensity > 0.8 ? 1 : 0, 0, 2);
+  const O = clamp(
+    s.occupancyCount > 30 ? 3 : s.occupancyCount > 15 ? 2 : s.occupancyCount > 5 ? 1 : 0,
+    0, 3
+  );
+  const V = Math.min(10, A + E_v + C_v + O);
+
+  // S = Severity/Spread: min(10, Z + M + D + T)
+  //   Z = zone spread (0-4), M = magnitude (0-2), D = damage (0-3), T = trend (0-1)
+  const Z = clamp(
+    s.smokeDensity > 0.8 ? 4 : s.smokeDensity > 0.5 ? 3 : s.waterLevel > 0.5 ? 3 : s.waterLevel > 0.2 ? 2 : 0,
+    0, 4
+  );
+  const M_s = clamp(Math.max(s.smokeDensity * 2, s.waterLevel * 1.5), 0, 2);
+  const D = clamp(
+    s.smokeDensity > 0.7 ? 3 : s.waterLevel > 0.5 ? 2 : s.exitBlocked ? 1 : 0,
+    0, 3
+  );
+  const T = s.smokeDensity > 0.3 || s.waterLevel > 0.2 ? 1 : 0;
+  const S = Math.min(10, Z + M_s + D + T);
+
+  // I = Immediate Intervention Need: min(10, Li + Ri + Ci)
+  //   Li = lifesaving needed (0-6), Ri = risk if delayed (0-3), Ci = complexity (0-2)
+  const Li = clamp(
+    (s.smokeDensity > 0.7 && s.exitBlocked ? 6 : s.smokeDensity > 0.6 ? 4 : s.waterLevel > 0.5 ? 3 : s.exitBlocked ? 2 : 0),
+    0, 6
+  );
+  const Ri = clamp(
+    s.smokeDensity > 0.5 ? 3 : s.waterLevel > 0.4 ? 2 : s.exitBlocked ? 2 : 0,
+    0, 3
+  );
+  const Ci = clamp(
+    rule.isCompound ? 2 : s.smokeDensity > 0.7 ? 1 : 0,
+    0, 2
+  );
+  const I = Math.min(10, Li + Ri + Ci);
+
+  // H = Historical/Hazard Context: min(10, Bh + Ch + Dh + W)
+  //   Bh = baseline site exposure (0-4) — Taj Mumbai is coastal, heritage building
+  //   Ch = condition-site match (0-3)
+  //   Dh = dependency fragility (0-2)
+  //   W = warning/compound (0-1)
+  const Bh = 3; // Taj Mumbai: coastal heritage building, high exposure
+  const Ch = clamp(
+    s.smokeDensity > 0.5 ? 2 : s.waterLevel > 0.3 ? 2 : 1,
+    0, 3
+  );
+  const Dh = 1; // Moderate dependency fragility
+  const W = rule.isCompound ? 1 : 0;
+  const H = Math.min(10, Bh + Ch + Dh + W);
+
+  // L = Location/Access Risk: min(10, Al + Hl + Rl)
+  //   Al = access difficulty (0-4), Hl = hazard location risk (0-3), Rl = responder delay (0-3)
+  const Al = clamp(
+    s.exitBlocked ? 4 : s.smokeDensity > 0.7 ? 3 : s.waterLevel > 0.5 ? 2 : 0,
+    0, 4
+  );
+  const Hl = clamp(
+    s.smokeDensity > 0.5 ? 2 : s.waterLevel > 0.3 ? 2 : 1,
+    0, 3
+  );
+  const Rl = clamp(
+    s.exitBlocked ? 2 : s.smokeDensity > 0.8 ? 1 : 0,
+    0, 3
+  );
+  const L = Math.min(10, Al + Hl + Rl);
+
+  // P = Propagation/Population Impact: min(10, Np + Cp + Ep)
+  //   Np = people affected (0-4), Cp = cascade risk (0-3), Ep = panic potential (0-3)
+  const Np = clamp(
+    s.occupancyCount > 50 ? 4 : s.occupancyCount > 20 ? 3 : s.occupancyCount > 10 ? 2 : 1,
+    0, 4
+  );
+  const Cp = clamp(
+    rule.isCompound ? 3 : s.smokeDensity > 0.5 ? 2 : s.waterLevel > 0.3 ? 1 : 0,
+    0, 3
+  );
+  const Ep = clamp(
+    s.exitBlocked && s.occupancyCount > 20 ? 3 : s.smokeDensity > 0.5 ? 2 : 1,
+    0, 3
+  );
+  const P = Math.min(10, Np + Cp + Ep);
+
+  return { V, S, I, H, L, P };
 }
 
 /**
@@ -156,18 +253,6 @@ function toBool(val) {
 
 function clamp(val, min, max) {
   return Math.max(min, Math.min(max, val));
-}
-
-function computeTimeToHarm(s) {
-  // 10 = immediate, 1 = distant
-  if (s.smokeDensity > 0.8 && s.exitBlocked) return 9.5;
-  if (s.smokeDensity > 0.7) return 8;
-  if (s.waterLevel > 0.6) return 7;
-  if (s.exitBlocked && s.occupancyCount > 30) return 7.5;
-  if (s.exitBlocked) return 6;
-  if (s.smokeDensity > 0.4) return 5;
-  if (s.waterLevel > 0.2) return 4;
-  return 3;
 }
 
 function buildExplanation(s, rule) {
@@ -245,38 +330,28 @@ function buildActions(s, rule) {
 
 const SYSTEM_PROMPT = `You are the intelligence engine for a Rapid Crisis Response System at the Taj Hotel, Mumbai (Colaba, coastal location, Arabian Sea, Seismic Zone III, 2008 attack history).
 
-Your role: Analyze an incident report (which may come from manual input, IoT sensors, CCTV, or weather/seismic feeds) and produce a structured JSON assessment.
+Your role: Analyze an incident report and produce a structured JSON assessment using the Unified Priority Engine factor model.
 
-**Hazard Types** (pick the best match, or multiple for compound):
-- Fires and Hazards
-- Flood
-- Earthquake
-- Cyclone
-- Storm Surge
-- Landslide
-- Medical Emergencies
-- Security Threats
-- Crowd Panic
-- Infrastructure Failures
-- Health Risks
-- Missing Persons
-- External Threats
+**Incident Domains**:
+- Medical: cardiac arrest, anaphylaxis, seizure, stroke, bleeding, food poisoning
+- Hazard: fire, flood, earthquake, cyclone, storm surge, landslide, gas leak, smoke
+- Infrastructure/Crowd: elevator entrapment, blackout, crowd surge, lockout, comms failure, HVAC collapse
 
-**Live Factor Scoring** (0-10 for each, based on the specific incident described):
-1. **currentSeverity**: How bad is it RIGHT NOW? (not how bad it could get)
-2. **peopleAtRisk**: How many guests/staff are exposed? Include vulnerable populations.
-3. **timeToHarm**: How quickly can this become life-threatening? (10 = seconds, 1 = days)
-4. **spreadPotential**: Is it growing, rising, spreading floor-to-floor or zone-to-zone?
-5. **evacuationDifficulty**: Are exits blocked? Lifts unusable? Visibility low?
-6. **meshOfflineNeed**: Will internet/cellular failure seriously hurt the response?
+**Six-Factor Scoring** (0-10 for each):
+1. **V** (Vital / Life Threat): How close this event is to immediate loss of life or severe harm.
+2. **S** (Severity / Spread): How severe the event is right now and how fast it is spreading or worsening.
+3. **I** (Immediate Intervention Need): How urgently an intervention is needed.
+4. **H** (Historical / Hazard Context): Guest, site, or system context that makes this incident more dangerous.
+5. **L** (Location / Access Risk): How difficult it is to reach, contain, rescue, or evacuate.
+6. **P** (Propagation / Population Impact): How many other people may be affected and how much cascade or panic is possible.
 
-**Confidence**: 0.0 to 1.0. How certain are you about this assessment? Lower if information is sparse or ambiguous.
+**Confidence**: 0.0 to 1.0. How certain are you about this assessment?
 
-**Explanation**: Write 3-5 bullet points explaining WHY you scored the way you did. Be specific — mention numbers, locations, conditions.
+**Explanation**: Write 3-5 bullet points explaining WHY you scored the way you did.
 
-**Recommended Actions**: 3-6 specific, actionable steps for the response team. Include evacuation routes, resource requests, assembly points WHERE RELEVANT.
+**Recommended Actions**: 3-6 specific, actionable steps for the response team.
 
-**Sensor Signals**: Extract or infer key measurable signals from the description (water depth, smoke level, occupancy count, blocked exits, etc.).
+**Sensor Signals**: Extract or infer key measurable signals from the description.
 
 Return EXACTLY this JSON (nothing else):
 {
@@ -284,19 +359,18 @@ Return EXACTLY this JSON (nothing else):
   "isCompound": true/false,
   "compoundTypes": ["<type1>", "<type2>"],
   "liveFactors": {
-    "currentSeverity": <0-10>,
-    "peopleAtRisk": <0-10>,
-    "timeToHarm": <0-10>,
-    "spreadPotential": <0-10>,
-    "evacuationDifficulty": <0-10>,
-    "meshOfflineNeed": <0-10>
+    "V": <0-10>,
+    "S": <0-10>,
+    "I": <0-10>,
+    "H": <0-10>,
+    "L": <0-10>,
+    "P": <0-10>
   },
   "confidence": <0.0-1.0>,
   "explanation": ["<bullet 1>", "<bullet 2>", "..."],
   "recommendedActions": ["<action 1>", "<action 2>", "..."],
   "sensorSignals": {
-    "<key>": "<value>",
-    ...
+    "<key>": "<value>"
   }
 }`;
 
@@ -315,7 +389,7 @@ export async function analyzeIncident(description, environmentContext = {}) {
 
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.1-flash-lite-preview",
+      model: GEMINI_TEXT_MODEL,
       generationConfig: { responseMimeType: "application/json" },
     });
 
@@ -361,7 +435,7 @@ export async function analyzeIncident(description, environmentContext = {}) {
 export async function analyzeCCTVImage(base64Image, mimeType, location, environmentContext = {}) {
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.1-flash-lite-preview",
+      model: GEMINI_VISION_MODEL,
       generationConfig: { responseMimeType: "application/json" },
     });
 
@@ -407,7 +481,7 @@ Respond with the JSON assessment.`;
 
 /**
  * Generate human-readable enrichment from CV state using LLM.
- * This is now the ASYNC ENRICHMENT path, called AFTER the deterministic
+ * This is the ASYNC ENRICHMENT path, called AFTER the deterministic
  * classifier has already scored and broadcast the incident.
  */
 export async function generateSummaryFromCV(cvState, environmentContext = {}) {
@@ -425,7 +499,7 @@ export async function generateSummaryFromCV(cvState, environmentContext = {}) {
 
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.1-flash-lite-preview",
+      model: GEMINI_TEXT_MODEL,
       generationConfig: { responseMimeType: "application/json" },
     });
 
@@ -436,13 +510,19 @@ Location: ${cvState.location}
 Description: ${cvState.description}
 Raw Detections: ${JSON.stringify(cvState.sensorSignals)}
 
-Provide a JSON object containing:
-1. "hazardType" (pick the best matching category like "Fires and Hazards", "Flood", "Crowd Panic")
+Provide a JSON object using the Unified Priority Engine factor model:
+1. "hazardType" (pick the best matching category)
 2. "isCompound" (boolean)
 3. "compoundTypes" (array of strings, if applicable)
-4. "liveFactors" (0-10 estimates for: currentSeverity, peopleAtRisk, timeToHarm, spreadPotential, evacuationDifficulty, meshOfflineNeed)
-5. "explanation" (array of 3-5 bullet points explaining the scene)
-6. "recommendedActions" (array of 3-6 specific actions)
+4. "liveFactors" object with:
+   - "V" (Vital/Life Threat, 0-10)
+   - "S" (Severity/Spread, 0-10)
+   - "I" (Immediate Intervention Need, 0-10)
+   - "H" (Historical/Hazard Context, 0-10)
+   - "L" (Location/Access Risk, 0-10)
+   - "P" (Propagation/Population Impact, 0-10)
+5. "explanation" (array of 3-5 bullet points)
+6. "recommendedActions" (array of 3-6 actions)
 7. "confidence" (0.0 to 1.0)
 
 Keep it factual based on the CV state.

@@ -1,10 +1,10 @@
 // ============================================================
-// SERVER — Main Entry Point (Optimized)
+// SERVER — Main Entry Point (Unified Priority Engine)
 // ============================================================
-// Pipeline: Input → AI/Deterministic → Scoring → Hard Overrides → Dashboard
+// Pipeline: Input → AI/Deterministic → Unified Scoring → Overrides → Dashboard
 // CCTV:     Deterministic classify → Score → Broadcast → Async LLM enrich
 // Feeds:    Weather + Earthquake + Sensor → Auto-Incident (parallel)
-// Loop:     Re-rank all active incidents every 30 seconds
+// Rerank:   Variable cadence per incident type (2-30 seconds)
 // ============================================================
 
 import express from "express";
@@ -14,7 +14,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import { analyzeIncident, generateSummaryFromCV, classifyFromCVSignals } from "./ai.js";
-import { computeFinalPriority } from "./scoring.js";
+import { scoreIncident, detectDomain, computeCompoundModifier, computeConfidence } from "./unifiedScoring.js";
 import { startWeatherFeed, getCurrentWeather, checkWeatherThresholds } from "./feeds/weatherFeed.js";
 import { startEarthquakeFeed, getSeismicStatus, getLatestQuakes, checkEarthquakeThresholds } from "./feeds/earthquakeFeed.js";
 import { startSensorSimulator, stopSensorSimulator, isSensorSimulatorRunning, checkSensorEvents, getSensorState } from "./feeds/sensorSimulator.js";
@@ -41,13 +41,6 @@ function genId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 }
 
-function getPriorityBand(score) {
-  if (score >= 8.5) return "Extreme";
-  if (score >= 6.5) return "High";
-  if (score >= 4.0) return "Medium";
-  return "Low";
-}
-
 /**
  * Generate a dedup key for an incident based on source + location + hazard.
  */
@@ -66,9 +59,9 @@ function findExistingIncident(key) {
 
 /**
  * Full incident processing pipeline (for manual/text incidents).
- * 1. AI interprets the description
- * 2. Scoring engine computes dual-layer priority
- * 3. Hard overrides applied
+ * 1. AI interprets the description (returns V/S/I/H/L/P)
+ * 2. Unified scoring engine computes priority
+ * 3. Hard overrides + compound modifier applied
  * 4. Returns the complete incident object
  */
 async function processIncident(description, location, source = "manual") {
@@ -78,7 +71,7 @@ async function processIncident(description, location, source = "manual") {
     seismic: getSeismicStatus(),
   };
 
-  // 1. AI Analysis
+  // 1. AI Analysis — returns V/S/I/H/L/P factors
   const aiResult = await analyzeIncident(description, environmentContext);
 
   // 2. Build incident object for scoring
@@ -89,10 +82,13 @@ async function processIncident(description, location, source = "manual") {
     liveFactors: aiResult.liveFactors,
     rawDescription: description,
     sensorSignals: aiResult.sensorSignals || {},
+    source,
+    location: location || "Taj Hotel Mumbai - General",
+    confidence: aiResult.confidence,
   };
 
-  // 3. Scoring engine (deterministic)
-  const scoring = computeFinalPriority(incidentForScoring);
+  // 3. Unified scoring engine (deterministic + overrides + compound)
+  const scoring = scoreIncident(incidentForScoring, activeIncidents);
 
   // 4. Assemble final incident
   const key = dedupKey(source, location || "general", aiResult.hazardType);
@@ -101,7 +97,7 @@ async function processIncident(description, location, source = "manual") {
     timestamp: new Date().toISOString(),
     lastUpdated: new Date().toISOString(),
     status: "Active",
-    source, // "manual" | "weather_feed" | "earthquake_feed" | "sensor_iot" | "sensor_cctv"
+    source,
     _dedupKey: key,
 
     // Classification
@@ -113,11 +109,11 @@ async function processIncident(description, location, source = "manual") {
     rawDescription: description,
     location: location || "Taj Hotel Mumbai - General",
 
-    // Scoring
+    // Unified Scoring (canonical output)
     ...scoring,
 
     // AI outputs
-    confidence: aiResult.confidence,
+    aiConfidence: aiResult.confidence,
     explanation: aiResult.explanation,
     recommendedActions: aiResult.recommendedActions,
     sensorSignals: aiResult.sensorSignals || {},
@@ -191,8 +187,8 @@ app.post("/api/cctv/scenario", (req, res) => {
   res.json({ success: true, scenario });
 });
 
-// ── Hybrid CCTV Pipeline Webhook (OPTIMIZED) ──────────────
-// Hot-path: deterministic classify → score → broadcast (~5ms)
+// ── Hybrid CCTV Pipeline Webhook (Unified Engine) ─────────
+// Hot-path: deterministic classify → unified score → broadcast (~5ms)
 // Background: async LLM enrichment → update incident → re-broadcast
 app.post("/api/cctv/stream_event", async (req, res) => {
   const { source, location, description, sensorSignals } = req.body;
@@ -202,10 +198,10 @@ app.post("/api/cctv/stream_event", async (req, res) => {
   const startTime = Date.now();
 
   try {
-    // 1. DETERMINISTIC classification (no LLM, ~1ms)
+    // 1. DETERMINISTIC classification — V/S/I/H/L/P (~1ms)
     const classification = classifyFromCVSignals(sensorSignals || {}, description);
 
-    // 2. Score deterministically
+    // 2. Build incident for unified scoring
     const incidentForScoring = {
       hazardType: classification.hazardType,
       isCompound: classification.isCompound,
@@ -213,11 +209,15 @@ app.post("/api/cctv/stream_event", async (req, res) => {
       liveFactors: classification.liveFactors,
       rawDescription: description,
       sensorSignals: sensorSignals || {},
+      source: source || "sensor_cctv",
+      location: location || "Main Lobby Camera A",
+      confidence: classification.confidence,
     };
 
-    const scoring = computeFinalPriority(incidentForScoring);
+    // 3. Unified scoring (with compound modifier from active incidents)
+    const scoring = scoreIncident(incidentForScoring, activeIncidents);
 
-    // 3. Deduplication — update existing or create new
+    // 4. Deduplication — update existing or create new
     const key = dedupKey(source || "sensor_cctv", location || "Main Lobby Camera A", classification.hazardType);
     const existing = findExistingIncident(key);
 
@@ -232,10 +232,10 @@ app.post("/api/cctv/stream_event", async (req, res) => {
       existing.compoundTypes = classification.compoundTypes || [];
       existing.explanation = classification.explanation;
       existing.recommendedActions = classification.recommendedActions;
-      existing.confidence = classification.confidence;
+      existing.aiConfidence = classification.confidence;
       Object.assign(existing, scoring);
       incident = existing;
-      console.log(`[CCTV Fast] Updated existing incident ${existing.id} in ${Date.now() - startTime}ms`);
+      console.log(`[CCTV Fast] Updated ${existing.id} | ${scoring.tier} (${scoring.score}) | ${Date.now() - startTime}ms`);
     } else {
       // CREATE new incident
       incident = {
@@ -251,28 +251,31 @@ app.post("/api/cctv/stream_event", async (req, res) => {
         rawDescription: description,
         location: location || "Main Lobby Camera A",
         ...scoring,
-        confidence: classification.confidence,
+        aiConfidence: classification.confidence,
         explanation: classification.explanation,
         recommendedActions: classification.recommendedActions,
         sensorSignals: sensorSignals || {},
       };
       activeIncidents.push(incident);
-      console.log(`[CCTV Fast] New incident ${incident.id} created in ${Date.now() - startTime}ms`);
+      console.log(`[CCTV Fast] New ${incident.id} | ${scoring.tier} (${scoring.score}) | V=${scoring.factors.V} S=${scoring.factors.S} I=${scoring.factors.I} | ${Date.now() - startTime}ms`);
     }
 
-    // 4. Broadcast immediately (dashboard gets update in ~5ms)
+    // 5. Broadcast immediately (dashboard gets update in ~5ms)
     broadcastIncidents();
 
-    // 5. Respond to Python pipeline immediately
+    // 6. Respond to Python pipeline immediately
     res.json({
       id: incident.id,
-      priorityBand: incident.priorityBand,
+      tier: incident.tier,
+      priorityBand: incident.tier,
+      score: incident.score,
       finalPriority: incident.finalPriority,
+      factors: incident.factors,
       latencyMs: Date.now() - startTime,
       enrichmentPending: true,
     });
 
-    // 6. ASYNC LLM enrichment (fire-and-forget, non-blocking)
+    // 7. ASYNC LLM enrichment (fire-and-forget, non-blocking)
     const cvState = { location, description, sensorSignals };
     const environmentContext = { weather: getCurrentWeather(), seismic: getSeismicStatus() };
 
@@ -281,16 +284,29 @@ app.post("/api/cctv/stream_event", async (req, res) => {
         // Merge LLM enrichment into the existing incident
         incident.explanation = aiEnriched.explanation || incident.explanation;
         incident.recommendedActions = aiEnriched.recommendedActions || incident.recommendedActions;
-        incident.confidence = aiEnriched.confidence || incident.confidence;
+        incident.aiConfidence = aiEnriched.confidence || incident.aiConfidence;
         incident._enrichedAt = new Date().toISOString();
+
+        // Re-score with LLM factors if they're better
+        if (aiEnriched.liveFactors) {
+          const enrichedScoring = scoreIncident({
+            ...incidentForScoring,
+            liveFactors: aiEnriched.liveFactors,
+            confidence: aiEnriched.confidence,
+          }, activeIncidents);
+
+          // Take the higher score (deterministic vs LLM)
+          if (enrichedScoring.score > incident.score) {
+            Object.assign(incident, enrichedScoring);
+          }
+        }
 
         // Re-broadcast with enriched data
         broadcastIncidents();
-        console.log(`[CCTV Enrich] LLM enrichment merged for ${incident.id} (+${Date.now() - startTime}ms total)`);
+        console.log(`[CCTV Enrich] LLM merged for ${incident.id} (+${Date.now() - startTime}ms total)`);
       })
       .catch((err) => {
         console.warn(`[CCTV Enrich] LLM enrichment failed (non-critical): ${err.message}`);
-        // Incident is already on dashboard with deterministic data — this is fine
       });
 
   } catch (err) {
@@ -316,9 +332,12 @@ app.post("/api/cctv/trigger", async (req, res) => {
         liveFactors: aiResult.liveFactors,
         rawDescription: cctvEv.description,
         sensorSignals: cctvEv.sensorSignals || {},
+        source: cctvEv.source,
+        location: cctvEv.location,
+        confidence: aiResult.confidence,
       };
 
-      const scoring = computeFinalPriority(incidentForScoring);
+      const scoring = scoreIncident(incidentForScoring, activeIncidents);
 
       const incident = {
         id: genId(),
@@ -332,7 +351,7 @@ app.post("/api/cctv/trigger", async (req, res) => {
         rawDescription: cctvEv.description,
         location: cctvEv.location,
         ...scoring,
-        confidence: aiResult.confidence,
+        aiConfidence: aiResult.confidence,
         explanation: aiResult.explanation,
         recommendedActions: aiResult.recommendedActions,
         sensorSignals: cctvEv.sensorSignals || {},
@@ -390,13 +409,22 @@ io.on("connection", (socket) => {
   });
 });
 
-// ── Auto-Feed & Re-Ranking Loop (30 seconds) ──────────────
+// ── Continuous Reranking Loop ──────────────────────────────
+// The spec mandates variable reranking cadence per incident type.
+// We use a fast base loop (5 seconds) and rerank incidents whose
+// rerankAfterSec has elapsed since their last rerank.
 
-const RERANK_INTERVAL_MS = 30_000;
+const BASE_RERANK_INTERVAL_MS = 5_000;
+const AUTO_FEED_CHECK_INTERVAL_MS = 30_000;
+let lastAutoFeedCheck = 0;
 
-async function autoFeedAndRerank() {
-  // 1. Check automated feeds for new incidents (PARALLEL)
-  if (autoFeedEnabled) {
+async function continuousRerankLoop() {
+  const now = Date.now();
+
+  // 1. Check auto-feeds every 30s
+  if (autoFeedEnabled && (now - lastAutoFeedCheck > AUTO_FEED_CHECK_INTERVAL_MS)) {
+    lastAutoFeedCheck = now;
+
     const weatherIncidents = checkWeatherThresholds();
     const earthquakeIncidents = checkEarthquakeThresholds();
     const sensorIncidents = checkSensorEvents();
@@ -404,7 +432,6 @@ async function autoFeedAndRerank() {
     const autoIncidents = [...weatherIncidents, ...earthquakeIncidents, ...sensorIncidents];
 
     if (autoIncidents.length > 0) {
-      // Process all auto-incidents in parallel
       const results = await Promise.allSettled(
         autoIncidents.map(async (raw) => {
           console.log(`[AutoFeed] Processing auto-incident from ${raw.source}: "${raw.description.substring(0, 50)}..."`);
@@ -424,14 +451,50 @@ async function autoFeedAndRerank() {
     }
   }
 
-  // 2. Broadcast updated environment
+  // 2. Rerank active incidents that are due for rescoring
+  let anyChanged = false;
+  for (const incident of activeIncidents) {
+    if (incident.status !== "Active") continue;
+
+    const rerankSec = incident.rerankAfterSec || 10;
+    const lastRanked = incident._lastRerankedAt || new Date(incident.timestamp).getTime();
+    const elapsed = (now - lastRanked) / 1000;
+
+    if (elapsed >= rerankSec) {
+      // Re-score with current context
+      const newScoring = scoreIncident({
+        hazardType: incident.hazardType,
+        isCompound: incident.isCompound,
+        compoundTypes: incident.compoundTypes,
+        liveFactors: incident.liveFactors || incident.factors,
+        rawDescription: incident.rawDescription,
+        sensorSignals: incident.sensorSignals || {},
+        source: incident.source,
+        location: incident.location,
+        confidence: incident.aiConfidence,
+      }, activeIncidents);
+
+      // Update scoring fields
+      const oldScore = incident.score;
+      Object.assign(incident, newScoring);
+      incident._lastRerankedAt = now;
+
+      if (Math.abs(oldScore - newScoring.score) > 0.1) {
+        anyChanged = true;
+      }
+    }
+  }
+
+  // 3. Broadcast updated environment
   io.emit("environment_update", {
     weather: getCurrentWeather(),
     seismic: getSeismicStatus(),
   });
 
-  // 3. Re-rank and broadcast
-  broadcastIncidents();
+  // 4. Re-rank and broadcast if anything changed
+  if (anyChanged) {
+    broadcastIncidents();
+  }
 }
 
 // ── Boot ───────────────────────────────────────────────────
@@ -439,14 +502,16 @@ async function autoFeedAndRerank() {
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`\n🚨 Crisis Response Backend running on port ${PORT}`);
-  console.log("   Pipeline: Deterministic CV → Scoring → Hard Overrides → Dashboard");
+  console.log("   Engine:   Unified Priority Engine (V/S/I/H/L/P)");
+  console.log("   Pipeline: Deterministic CV → Unified Score → Overrides → Dashboard");
   console.log("   CCTV:     ~5ms hot-path + async LLM enrichment");
+  console.log("   Rerank:   Continuous (2-30s per incident type)");
   console.log("   Feeds:    Weather (Open-Meteo) + Earthquake (USGS) + IoT Simulator\n");
 
   // Start automated data feeds
   startWeatherFeed();
   startEarthquakeFeed();
 
-  // Start the re-ranking loop
-  setInterval(autoFeedAndRerank, RERANK_INTERVAL_MS);
+  // Start the continuous reranking loop
+  setInterval(continuousRerankLoop, BASE_RERANK_INTERVAL_MS);
 });
