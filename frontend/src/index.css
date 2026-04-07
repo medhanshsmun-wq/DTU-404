@@ -2,141 +2,385 @@
 
 @theme {
   --font-sans: "Inter", "system-ui", "sans-serif";
-  --color-crisis-critical: #ef4444;
-  --color-crisis-high: #f97316;
-  --color-crisis-medium: #eab308;
-  --color-crisis-low: #3b82f6;
+  --font-mono: "JetBrains Mono", "Fira Code", "monospace";
+  
+  /* Primary Brand Colors */
+  --color-background: #0a0a0a;
+  --color-background-secondary: #111111;
+  --color-background-tertiary: #171717;
+  --color-surface: #1a1a1a;
+  --color-surface-elevated: #222222;
+  
+  /* Border Colors */
+  --color-border: #262626;
+  --color-border-subtle: #1f1f1f;
+  --color-border-focus: #404040;
+  
+  /* Text Colors */
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a1a1a1;
+  --color-text-tertiary: #737373;
+  --color-text-muted: #525252;
+  
+  /* Accent Colors */
+  --color-accent: #3b82f6;
+  --color-accent-hover: #60a5fa;
+  --color-accent-muted: rgba(59, 130, 246, 0.15);
+  
+  /* Status Colors */
+  --color-critical: #ef4444;
+  --color-critical-muted: rgba(239, 68, 68, 0.15);
+  --color-high: #f97316;
+  --color-high-muted: rgba(249, 115, 22, 0.15);
+  --color-medium: #eab308;
+  --color-medium-muted: rgba(234, 179, 8, 0.15);
+  --color-low: #22c55e;
+  --color-low-muted: rgba(34, 197, 94, 0.15);
+  --color-info: #3b82f6;
+  --color-info-muted: rgba(59, 130, 246, 0.15);
 }
 
 @layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  
+  html {
+    color-scheme: dark;
+  }
+  
   body {
-    @apply bg-[#06090f] text-slate-100 min-h-screen font-sans antialiased selection:bg-red-500/30;
+    @apply bg-[#0a0a0a] text-[#fafafa] min-h-screen font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
+  /* Custom Scrollbar */
   ::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(100, 116, 139, 0.3);
-    border-radius: 3px;
+    background: #333333;
+    border-radius: 4px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(100, 116, 139, 0.5);
+    background: #444444;
+  }
+  
+  /* Selection */
+  ::selection {
+    background: rgba(59, 130, 246, 0.3);
+    color: #fff;
   }
 }
 
-/* ── Glass Panels ─────────────────────────────────────── */
+/* ── Layout Components ─────────────────────────────────── */
+
+.sidebar {
+  @apply fixed left-0 top-0 bottom-0 w-64 bg-[#0a0a0a] border-r border-[#1f1f1f] flex flex-col z-40;
+}
+
+.main-content {
+  @apply ml-64 min-h-screen bg-[#0a0a0a];
+}
+
+/* ── Card Styles ─────────────────────────────────────── */
+
+.card {
+  @apply bg-[#111111] border border-[#1f1f1f] rounded-xl;
+}
+
+.card-elevated {
+  @apply bg-[#141414] border border-[#262626] rounded-xl shadow-xl;
+}
+
+.card-interactive {
+  @apply bg-[#111111] border border-[#1f1f1f] rounded-xl transition-all duration-200;
+}
+
+.card-interactive:hover {
+  @apply border-[#333333] bg-[#161616];
+}
+
+/* ── Glass Panel (Legacy Support) ──────────────────────── */
 .glass-panel {
-  @apply bg-[#0c1220]/80 backdrop-blur-xl border border-slate-700/40 shadow-xl;
+  @apply bg-[#111111] border border-[#1f1f1f] shadow-lg;
 }
 
 .glass-panel-elevated {
-  @apply bg-[#0f1729]/90 backdrop-blur-xl border border-slate-600/30 shadow-2xl;
+  @apply bg-[#141414] border border-[#262626] shadow-2xl;
 }
 
-/* ── Tier Glow Effects ────────────────────────────────── */
+/* ── Tier Status Cards ────────────────────────────────── */
+
 .tier-critical {
-  --glow: rgba(239, 68, 68, 0.15);
   border-color: rgba(239, 68, 68, 0.4);
-  box-shadow: 0 0 30px var(--glow), inset 0 1px 0 rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1), 0 4px 12px rgba(239, 68, 68, 0.1);
 }
 
 .tier-high {
-  --glow: rgba(249, 115, 22, 0.1);
   border-color: rgba(249, 115, 22, 0.35);
-  box-shadow: 0 0 20px var(--glow), inset 0 1px 0 rgba(249, 115, 22, 0.08);
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.1), 0 4px 12px rgba(249, 115, 22, 0.08);
 }
 
 .tier-medium {
-  --glow: rgba(234, 179, 8, 0.06);
-  border-color: rgba(234, 179, 8, 0.25);
-  box-shadow: 0 0 15px var(--glow);
+  border-color: rgba(234, 179, 8, 0.3);
+  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.08);
 }
 
 .tier-low {
-  border-color: rgba(59, 130, 246, 0.2);
+  border-color: rgba(34, 197, 94, 0.25);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.05);
+}
+
+/* ── Button Styles ───────────────────────────────────── */
+
+.btn-primary {
+  @apply bg-white text-black font-medium px-4 py-2 rounded-lg text-sm transition-all duration-200;
+}
+
+.btn-primary:hover {
+  @apply bg-neutral-200;
+}
+
+.btn-primary:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply bg-[#1a1a1a] border border-[#333333] text-white font-medium px-4 py-2 rounded-lg text-sm transition-all duration-200;
+}
+
+.btn-secondary:hover {
+  @apply bg-[#262626] border-[#404040];
+}
+
+.btn-ghost {
+  @apply text-[#a1a1a1] font-medium px-3 py-2 rounded-lg text-sm transition-all duration-200;
+}
+
+.btn-ghost:hover {
+  @apply text-white bg-[#1a1a1a];
+}
+
+.btn-danger {
+  @apply bg-red-500/10 border border-red-500/30 text-red-400 font-medium px-4 py-2 rounded-lg text-sm transition-all duration-200;
+}
+
+.btn-danger:hover {
+  @apply bg-red-500/20 border-red-500/50;
+}
+
+/* ── Input Styles ────────────────────────────────────── */
+
+.input {
+  @apply w-full bg-[#0a0a0a] border border-[#262626] rounded-lg px-3 py-2 text-sm text-white placeholder-[#525252] transition-all duration-200;
+}
+
+.input:focus {
+  @apply outline-none border-[#404040] ring-1 ring-[#404040];
+}
+
+.input:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* ── Badge Styles ────────────────────────────────────── */
+
+.badge {
+  @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium;
+}
+
+.badge-critical {
+  @apply bg-red-500/15 text-red-400 border border-red-500/30;
+}
+
+.badge-high {
+  @apply bg-orange-500/15 text-orange-400 border border-orange-500/30;
+}
+
+.badge-medium {
+  @apply bg-yellow-500/15 text-yellow-400 border border-yellow-500/30;
+}
+
+.badge-low {
+  @apply bg-green-500/15 text-green-400 border border-green-500/30;
+}
+
+.badge-info {
+  @apply bg-blue-500/15 text-blue-400 border border-blue-500/30;
+}
+
+.badge-neutral {
+  @apply bg-[#1a1a1a] text-[#a1a1a1] border border-[#262626];
+}
+
+/* ── Navigation Item ─────────────────────────────────── */
+
+.nav-item {
+  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[#737373] transition-all duration-200;
+}
+
+.nav-item:hover {
+  @apply text-white bg-[#1a1a1a];
+}
+
+.nav-item.active {
+  @apply text-white bg-[#1a1a1a];
+}
+
+/* ── Stat Card ───────────────────────────────────────── */
+
+.stat-card {
+  @apply bg-[#111111] border border-[#1f1f1f] rounded-xl p-4 transition-all duration-200;
+}
+
+.stat-card:hover {
+  @apply border-[#262626];
 }
 
 /* ── Animations ───────────────────────────────────────── */
+
 .crisis-pulse {
   animation: crisis-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 @keyframes crisis-pulse {
   0%, 100% {
-    border-color: rgba(239, 68, 68, 0.2);
-    box-shadow: 0 0 15px rgba(239, 68, 68, 0);
+    border-color: rgba(239, 68, 68, 0.3);
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1);
   }
   50% {
     border-color: rgba(239, 68, 68, 0.6);
-    box-shadow: 0 0 30px rgba(239, 68, 68, 0.25), 0 0 60px rgba(239, 68, 68, 0.1);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.15), 0 0 40px rgba(239, 68, 68, 0.05);
   }
 }
 
-@keyframes ambient-drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  25% { transform: translate(10px, -10px) scale(1.02); }
-  50% { transform: translate(-5px, 5px) scale(0.98); }
-  75% { transform: translate(5px, 10px) scale(1.01); }
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
-.ambient-blob {
-  animation: ambient-drift 20s ease-in-out infinite;
-}
-
-@keyframes score-entry {
-  from { transform: scale(0.8); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
-.score-animate {
-  animation: score-entry 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.shimmer {
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
-  background-size: 200% 100%;
-  animation: shimmer 2s ease-in-out infinite;
-}
-
-@keyframes fade-up {
+@keyframes slide-up {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.fade-up {
-  animation: fade-up 0.4s ease-out;
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
-/* ── Factor Radar Background ─────────────────────────── */
-.factor-gauge {
-  position: relative;
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
 }
 
-.factor-gauge::after {
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+/* ── Live Indicator ──────────────────────────────────── */
+
+.live-indicator {
+  @apply relative flex items-center gap-2;
+}
+
+.live-indicator::before {
   content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 9999px;
-  background: conic-gradient(from 0deg, var(--gauge-color) var(--gauge-pct), transparent var(--gauge-pct));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff 0);
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #fff 0);
+  @apply w-2 h-2 rounded-full bg-green-500;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.1); }
+}
+
+/* ── Progress Bar ────────────────────────────────────── */
+
+.progress-bar {
+  @apply h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden;
+}
+
+.progress-bar-fill {
+  @apply h-full rounded-full transition-all duration-500 ease-out;
+}
+
+/* ── Table Styles ────────────────────────────────────── */
+
+.table-header {
+  @apply text-xs font-medium text-[#737373] uppercase tracking-wider;
+}
+
+.table-row {
+  @apply border-b border-[#1f1f1f] transition-colors duration-150;
+}
+
+.table-row:hover {
+  @apply bg-[#141414];
+}
+
+.table-cell {
+  @apply px-4 py-3 text-sm;
 }
 
 /* ── Autonomy Badge ───────────────────────────────────── */
 .autonomy-badge {
-  @apply text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full;
+  @apply text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full;
 }
-.autonomy-A0 { @apply bg-slate-800 text-slate-400 border border-slate-700; }
+.autonomy-A0 { @apply bg-[#1a1a1a] text-[#737373] border border-[#262626]; }
 .autonomy-A1 { @apply bg-blue-500/10 text-blue-400 border border-blue-500/30; }
 .autonomy-A2 { @apply bg-amber-500/10 text-amber-400 border border-amber-500/30; }
 .autonomy-A3 { @apply bg-red-500/10 text-red-400 border border-red-500/30; }
-.autonomy-A4 { @apply bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/30; }
+.autonomy-A4 { @apply bg-purple-500/10 text-purple-400 border border-purple-500/30; }
+
+/* ── Tooltip ─────────────────────────────────────────── */
+
+.tooltip {
+  @apply absolute z-50 px-2 py-1 text-xs bg-[#262626] text-white rounded-md shadow-lg;
+  animation: fade-in 0.15s ease-out;
+}
+
+/* ── Divider ─────────────────────────────────────────── */
+
+.divider {
+  @apply h-px bg-[#1f1f1f] my-4;
+}
+
+.divider-vertical {
+  @apply w-px bg-[#1f1f1f] mx-4 self-stretch;
+}
+
+/* ── Chat Bubble ─────────────────────────────────────── */
+
+.chat-bubble-user {
+  @apply bg-[#262626] text-white rounded-2xl rounded-br-md px-4 py-2.5;
+}
+
+.chat-bubble-assistant {
+  @apply bg-[#1a1a1a] border border-[#262626] text-white rounded-2xl rounded-bl-md px-4 py-2.5;
+}
+
+/* ── Code Block ──────────────────────────────────────── */
+
+.code-block {
+  @apply bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-3 font-mono text-sm overflow-x-auto;
+}
+
+/* ── Score Display ───────────────────────────────────── */
+
+.score-display {
+  @apply font-mono font-bold tabular-nums;
+}
+
+.score-critical { @apply text-red-400; }
+.score-high { @apply text-orange-400; }
+.score-medium { @apply text-yellow-400; }
+.score-low { @apply text-green-400; }

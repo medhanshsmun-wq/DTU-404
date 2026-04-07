@@ -1,54 +1,66 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Send, Activity, Loader, MapPin, Zap } from 'lucide-react';
+import { X, Send, Activity, Loader2, MapPin, AlertTriangle, Flame, Droplets, Users, Heart, Shield, ChevronRight } from 'lucide-react';
 import { API_BASE_URL } from '../config';
 
 const LOCATIONS = [
-  "Taj Hotel Mumbai - General",
-  "Palace Wing - Lobby",
-  "Palace Wing - Floor 1",
-  "Palace Wing - Floor 2",
-  "Tower Wing - Lobby",
-  "Tower Wing - Floor 1",
-  "Tower Wing - Floor 2",
-  "Main Kitchen",
-  "Sea Lounge Restaurant",
-  "Crystal Ballroom",
-  "Pool & Spa Area",
-  "Basement / Parking",
-  "Gateway Terrace",
+  "Facility - General",
+  "Main Building - Lobby",
+  "Main Building - Floor 1",
+  "Main Building - Floor 2",
+  "East Wing - Lobby",
+  "East Wing - Floor 1",
+  "East Wing - Floor 2",
+  "Kitchen Area",
+  "Restaurant",
+  "Conference Hall",
+  "Pool Area",
+  "Parking - Basement",
+  "Outdoor Terrace",
 ];
 
 const PRESETS = [
   {
-    label: "Kitchen fire — contained",
+    label: "Kitchen Fire",
     description: "Small fire detected in the main kitchen, contained to one stove. Extinguisher used. No smoke spread to corridors. 3 staff in the area, all safe.",
-    tier: "Low/Medium",
+    tier: "Medium",
+    icon: Flame,
+    color: "orange",
   },
   {
-    label: "Extreme flood — blocked exits",
+    label: "Severe Flooding",
     description: "Extreme rainfall causing rapid water flooding in the lobby and basement. Water depth at 0.7m in lobby and rising fast. 63 guests and staff in affected ground-floor and mezzanine zones. 2 exits blocked by water. Basement parking fully submerged.",
     tier: "Critical",
+    icon: Droplets,
+    color: "red",
   },
   {
-    label: "Earthquake M5.5 — power out",
-    description: "Earthquake felt strongly across the venue, estimated M5.5. Power is out in the Tower Wing. Guests evacuating via stairwells. Reports of cracked walls on Floor 3. Elevators are stuck. 120+ guests in Tower Wing.",
+    label: "Earthquake Impact",
+    description: "Earthquake felt strongly across the venue, estimated M5.5. Power is out in the East Wing. Guests evacuating via stairwells. Reports of cracked walls on Floor 3. Elevators are stuck. 120+ guests in East Wing.",
     tier: "Critical",
+    icon: Activity,
+    color: "red",
   },
   {
-    label: "Smoke in escape corridor",
-    description: "Heavy smoke detected in the main escape corridor on Floor 2. Fire source unknown. Visibility below 5 meters. 40 guests on Floor 2, stairwell access compromised. Sprinklers have activated.",
-    tier: "Critical",
-  },
-  {
-    label: "Guest cardiac arrest",
+    label: "Medical Emergency",
     description: "Guest found unresponsive with no pulse in Room 412. Staff performing CPR. AED requested. No breathing detected. Elderly male, approximately 65 years old.",
     tier: "Critical",
+    icon: Heart,
+    color: "red",
   },
   {
-    label: "Crowd crush at ballroom",
-    description: "CCTV detects dangerous crowd density at Crystal Ballroom exit. 200+ guests trying to exit simultaneously. Crowd crush risk imminent. 2 side exits are locked.",
+    label: "Crowd Safety Risk",
+    description: "CCTV detects dangerous crowd density at Conference Hall exit. 200+ guests trying to exit simultaneously. Crowd crush risk imminent. 2 side exits are locked.",
     tier: "Critical",
+    icon: Users,
+    color: "red",
+  },
+  {
+    label: "Security Threat",
+    description: "Suspicious individual reported near main entrance. Security cameras show person with concealed object. Staff have been alerted. 50+ guests in immediate area.",
+    tier: "High",
+    icon: Shield,
+    color: "orange",
   },
 ];
 
@@ -57,6 +69,7 @@ function SimulatorModal({ onClose }) {
   const [location, setLocation] = useState(LOCATIONS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [selectedPreset, setSelectedPreset] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -81,42 +94,70 @@ function SimulatorModal({ onClose }) {
     }
   };
 
+  const handlePresetSelect = (preset, index) => {
+    setDescription(preset.description);
+    setSelectedPreset(index);
+  };
+
   return (
-    <div className="fixed inset-0 bg-[#06090f]/90 backdrop-blur-xl z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="glass-panel-elevated w-full max-w-2xl rounded-2xl border border-slate-600/30 shadow-2xl max-h-[90vh] overflow-y-auto"
+        className="relative w-full max-w-2xl bg-[#0a0a0a] border border-[#262626] rounded-xl shadow-2xl max-h-[90vh] overflow-hidden"
       >
-        <div className="flex justify-between items-center p-5 border-b border-slate-700/30">
-          <h2 className="text-base font-bold text-white flex items-center gap-2">
-            <div className="p-1.5 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
-              <Activity className="w-4 h-4 text-indigo-400" />
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-[#1f1f1f]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center">
+              <Activity className="w-5 h-5 text-black" />
             </div>
-            Simulate Crisis Event
-          </h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-700/50">
+            <div>
+              <h2 className="text-base font-semibold text-white">Simulate Event</h2>
+              <p className="text-xs text-[#525252]">Test the priority engine with custom scenarios</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose} 
+            className="p-2 rounded-lg hover:bg-[#1a1a1a] transition-colors text-[#525252] hover:text-white"
+          >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-5">
-          <p className="text-slate-500 text-xs mb-4 leading-relaxed">
-            The Unified Priority Engine will classify the incident, select the domain adapter (Medical / Hazard / Infrastructure+Crowd), compute <strong className="text-slate-300">V/S/I/H/L/P</strong> factors, apply hard overrides and compound modifiers, and produce an explainable priority ranking.
-          </p>
+        {/* Content */}
+        <div className="p-5 overflow-y-auto max-h-[calc(90vh-180px)]">
+          {/* Info Banner */}
+          <div className="bg-[#111111] border border-[#1f1f1f] rounded-lg p-4 mb-5">
+            <p className="text-xs text-[#737373] leading-relaxed">
+              The Priority Engine will classify the incident, select the appropriate domain adapter 
+              (Medical / Hazard / Infrastructure), compute <span className="text-white font-medium">V/S/I/H/L/P</span> factors, 
+              apply hard overrides and compound modifiers, and produce an explainable priority ranking.
+            </p>
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {/* Location */}
             <div>
-              <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1.5 block flex items-center gap-1">
-                <MapPin className="w-3 h-3" />
-                Venue Location
+              <label className="flex items-center gap-2 text-xs font-medium text-[#737373] uppercase tracking-wider mb-2">
+                <MapPin className="w-3.5 h-3.5" />
+                Location
               </label>
               <select
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                className="w-full bg-slate-900/80 border border-slate-700/50 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                className="input"
               >
                 {LOCATIONS.map(loc => (
                   <option key={loc} value={loc}>{loc}</option>
@@ -126,68 +167,105 @@ function SimulatorModal({ onClose }) {
 
             {/* Description */}
             <div>
-              <label className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1.5 block">
+              <label className="flex items-center gap-2 text-xs font-medium text-[#737373] uppercase tracking-wider mb-2">
+                <AlertTriangle className="w-3.5 h-3.5" />
                 Incident Description
               </label>
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe what's happening — include details about water depth, smoke level, people count, blocked exits, medical symptoms, etc."
-                className="w-full h-28 bg-slate-900/80 border border-slate-700/50 rounded-xl p-3 text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 text-xs resize-none"
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  setSelectedPreset(null);
+                }}
+                placeholder="Describe what's happening - include details about water depth, smoke level, people count, blocked exits, medical symptoms, etc."
+                className="input h-28 resize-none"
                 disabled={isSubmitting}
               />
             </div>
 
+            {/* Error */}
             {error && (
-              <div className="text-red-400 text-xs bg-red-500/8 p-2.5 rounded-lg border border-red-500/15">{error}</div>
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-xs text-red-400">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
             )}
 
-            {/* Presets */}
+            {/* Scenario Presets */}
             <div>
-              <div className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-2">Scenario Presets</div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {PRESETS.map((preset, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setDescription(preset.description)}
-                    className="text-[11px] bg-slate-800/60 hover:bg-slate-700/60 text-slate-300 border border-slate-700/40 py-2 px-3 rounded-lg transition-colors text-left flex items-center justify-between gap-2 group"
-                  >
-                    <span>{preset.label}</span>
-                    <span className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                      preset.tier === 'Critical' ? 'bg-red-500/15 text-red-400' :
-                      preset.tier === 'High' ? 'bg-orange-500/15 text-orange-400' :
-                      'bg-slate-700/50 text-slate-500'
-                    } opacity-0 group-hover:opacity-100 transition-opacity`}>
-                      {preset.tier}
-                    </span>
-                  </button>
-                ))}
+              <label className="text-xs font-medium text-[#737373] uppercase tracking-wider mb-3 block">
+                Quick Scenarios
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {PRESETS.map((preset, i) => {
+                  const Icon = preset.icon;
+                  const isSelected = selectedPreset === i;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => handlePresetSelect(preset, i)}
+                      className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+                        isSelected 
+                          ? 'bg-[#1a1a1a] border-[#404040]' 
+                          : 'bg-[#111111] border-[#1f1f1f] hover:border-[#333333]'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        preset.color === 'red' ? 'bg-red-500/10' : 'bg-orange-500/10'
+                      }`}>
+                        <Icon className={`w-4 h-4 ${
+                          preset.color === 'red' ? 'text-red-400' : 'text-orange-400'
+                        }`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-white">{preset.label}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                            preset.tier === 'Critical' ? 'bg-red-500/15 text-red-400' :
+                            preset.tier === 'High' ? 'bg-orange-500/15 text-orange-400' :
+                            'bg-yellow-500/15 text-yellow-400'
+                          }`}>
+                            {preset.tier}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight className={`w-4 h-4 text-[#404040] ${isSelected ? 'text-white' : ''}`} />
+                    </button>
+                  );
+                })}
               </div>
             </div>
-
-            <div className="pt-3 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-slate-400 hover:text-white text-xs font-medium transition-colors rounded-lg hover:bg-slate-800/50"
-                disabled={isSubmitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!description.trim() || isSubmitting}
-                className="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 disabled:opacity-30 text-white px-5 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 shadow-lg shadow-indigo-500/15"
-              >
-                {isSubmitting ? (
-                  <><Loader className="w-3.5 h-3.5 animate-spin" /> Processing...</>
-                ) : (
-                  <><Send className="w-3.5 h-3.5" /> Dispatch Incident</>
-                )}
-              </button>
-            </div>
           </form>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-3 p-5 border-t border-[#1f1f1f] bg-[#0a0a0a]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-ghost"
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!description.trim() || isSubmitting}
+            className="btn-primary flex items-center gap-2"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Send className="w-4 h-4" />
+                Dispatch Event
+              </>
+            )}
+          </button>
         </div>
       </motion.div>
     </div>
