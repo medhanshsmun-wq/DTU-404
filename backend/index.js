@@ -2,7 +2,7 @@
 // SERVER — Main Entry Point (Unified Priority Engine)
 // ============================================================
 // Pipeline: Input → AI/Deterministic → Unified Scoring → Overrides → Dashboard
-// CCTV:     Deterministic classify → Score → Broadcast → Async LLM enrich
+// CCTV:     Deterministic classify → Score → Broadcast → Async LLM enrich (gated)
 // Feeds:    Weather + Earthquake + Sensor → Auto-Incident (parallel)
 // Rerank:   Variable cadence per incident type (2-30 seconds)
 // ============================================================
@@ -14,6 +14,10 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import { analyzeIncident, generateSummaryFromCV, classifyFromCVSignals } from "./ai.js";
+import {
+  shouldCallLLMForCVEnrichment,
+  recordSuccessfulCctvLlmEnrichment,
+} from "./cctvEnrichmentPolicy.js";
 import { scoreIncident, detectDomain, computeCompoundModifier, computeConfidence } from "./unifiedScoring.js";
 import { startWeatherFeed, getCurrentWeather, checkWeatherThresholds } from "./feeds/weatherFeed.js";
 import { startEarthquakeFeed, getSeismicStatus, getLatestQuakes, checkEarthquakeThresholds } from "./feeds/earthquakeFeed.js";
@@ -191,7 +195,7 @@ app.post("/api/cctv/scenario", (req, res) => {
 // Hot-path: deterministic classify → unified score → broadcast (~5ms)
 // Background: async LLM enrichment → update incident → re-broadcast
 app.post("/api/cctv/stream_event", async (req, res) => {
-  const { source, location, description, sensorSignals } = req.body;
+  const { source, location, description, sensorSignals, ml, forceLlmEnrich } = req.body;
 
   if (!description) return res.status(400).json({ error: "Missing CV state description" });
 
@@ -199,7 +203,11 @@ app.post("/api/cctv/stream_event", async (req, res) => {
 
   try {
     // 1. DETERMINISTIC classification — V/S/I/H/L/P (~1ms)
+    // Optional `ml` from edge model: { confidence, topLabels?, version? } — used for LLM gating only here
     const classification = classifyFromCVSignals(sensorSignals || {}, description);
+    if (ml && typeof ml.confidence === "number") {
+      classification.confidence = Math.max(classification.confidence, ml.confidence);
+    }
 
     // 2. Build incident for unified scoring
     const incidentForScoring = {
@@ -233,6 +241,7 @@ app.post("/api/cctv/stream_event", async (req, res) => {
       existing.explanation = classification.explanation;
       existing.recommendedActions = classification.recommendedActions;
       existing.aiConfidence = classification.confidence;
+      existing.mlHints = ml || existing.mlHints;
       Object.assign(existing, scoring);
       incident = existing;
       console.log(`[CCTV Fast] Updated ${existing.id} | ${scoring.tier} (${scoring.score}) | ${Date.now() - startTime}ms`);
@@ -255,6 +264,7 @@ app.post("/api/cctv/stream_event", async (req, res) => {
         explanation: classification.explanation,
         recommendedActions: classification.recommendedActions,
         sensorSignals: sensorSignals || {},
+        mlHints: ml || null,
       };
       activeIncidents.push(incident);
       console.log(`[CCTV Fast] New ${incident.id} | ${scoring.tier} (${scoring.score}) | V=${scoring.factors.V} S=${scoring.factors.S} I=${scoring.factors.I} | ${Date.now() - startTime}ms`);
@@ -262,6 +272,15 @@ app.post("/api/cctv/stream_event", async (req, res) => {
 
     // 5. Broadcast immediately (dashboard gets update in ~5ms)
     broadcastIncidents();
+
+    const enrichDecision = shouldCallLLMForCVEnrichment({
+      dedupKey: key,
+      tier: scoring.tier,
+      isCompound: classification.isCompound,
+      classificationConfidence: classification.confidence,
+      mlConfidence: ml && typeof ml.confidence === "number" ? ml.confidence : undefined,
+      force: Boolean(forceLlmEnrich),
+    });
 
     // 6. Respond to Python pipeline immediately
     res.json({
@@ -272,42 +291,48 @@ app.post("/api/cctv/stream_event", async (req, res) => {
       finalPriority: incident.finalPriority,
       factors: incident.factors,
       latencyMs: Date.now() - startTime,
-      enrichmentPending: true,
+      enrichmentPending: enrichDecision.call,
+      enrichmentPolicy: enrichDecision.reason,
     });
 
-    // 7. ASYNC LLM enrichment (fire-and-forget, non-blocking)
-    const cvState = { location, description, sensorSignals };
-    const environmentContext = { weather: getCurrentWeather(), seismic: getSeismicStatus() };
+    // 7. ASYNC LLM enrichment (gated — autonomous CV path avoids constant API use)
+    if (enrichDecision.call) {
+      const cvState = { location, description, sensorSignals };
+      const environmentContext = { weather: getCurrentWeather(), seismic: getSeismicStatus() };
 
-    generateSummaryFromCV(cvState, environmentContext)
-      .then((aiEnriched) => {
-        // Merge LLM enrichment into the existing incident
-        incident.explanation = aiEnriched.explanation || incident.explanation;
-        incident.recommendedActions = aiEnriched.recommendedActions || incident.recommendedActions;
-        incident.aiConfidence = aiEnriched.confidence || incident.aiConfidence;
-        incident._enrichedAt = new Date().toISOString();
+      generateSummaryFromCV(cvState, environmentContext)
+        .then((aiEnriched) => {
+          recordSuccessfulCctvLlmEnrichment(key);
+          // Merge LLM enrichment into the existing incident
+          incident.explanation = aiEnriched.explanation || incident.explanation;
+          incident.recommendedActions = aiEnriched.recommendedActions || incident.recommendedActions;
+          incident.aiConfidence = aiEnriched.confidence || incident.aiConfidence;
+          incident._enrichedAt = new Date().toISOString();
 
-        // Re-score with LLM factors if they're better
-        if (aiEnriched.liveFactors) {
-          const enrichedScoring = scoreIncident({
-            ...incidentForScoring,
-            liveFactors: aiEnriched.liveFactors,
-            confidence: aiEnriched.confidence,
-          }, activeIncidents);
+          // Re-score with LLM factors if they're better
+          if (aiEnriched.liveFactors) {
+            const enrichedScoring = scoreIncident({
+              ...incidentForScoring,
+              liveFactors: aiEnriched.liveFactors,
+              confidence: aiEnriched.confidence,
+            }, activeIncidents);
 
-          // Take the higher score (deterministic vs LLM)
-          if (enrichedScoring.score > incident.score) {
-            Object.assign(incident, enrichedScoring);
+            // Take the higher score (deterministic vs LLM)
+            if (enrichedScoring.score > incident.score) {
+              Object.assign(incident, enrichedScoring);
+            }
           }
-        }
 
-        // Re-broadcast with enriched data
-        broadcastIncidents();
-        console.log(`[CCTV Enrich] LLM merged for ${incident.id} (+${Date.now() - startTime}ms total)`);
-      })
-      .catch((err) => {
-        console.warn(`[CCTV Enrich] LLM enrichment failed (non-critical): ${err.message}`);
-      });
+          // Re-broadcast with enriched data
+          broadcastIncidents();
+          console.log(`[CCTV Enrich] LLM merged for ${incident.id} (+${Date.now() - startTime}ms total)`);
+        })
+        .catch((err) => {
+          console.warn(`[CCTV Enrich] LLM enrichment failed (non-critical): ${err.message}`);
+        });
+    } else {
+      console.log(`[CCTV Enrich] Skipped LLM (${enrichDecision.reason}) for ${incident.id}`);
+    }
 
   } catch (err) {
     console.error("[CCTV Fast] Error:", err.message);
