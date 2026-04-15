@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "system-ui", "sans-serif";
+  --font-display: "Playfair Display", "Georgia", "serif";
+}
+
+@layer base {
+  * { border-color: #1e1e1e; }
+  html { color-scheme: dark; }
+  body {
+    @apply bg-[#0b0b0b] text-[#f5f0e8] min-h-screen font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+  ::selection { background: rgba(212, 175, 55, 0.3); color: #fff; }
+}
+
+/* ── Luxury Hotel Theme ───────────────────────────── */
+
+.page-container {
+  @apply min-h-screen pb-24 px-4 pt-4;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.card {
+  @apply bg-[#141414] border border-[#222222] rounded-2xl;
+}
+
+.card-gold {
+  @apply bg-gradient-to-br from-[#1a1710] to-[#141414] border border-[#2a2418] rounded-2xl;
+}
+
+.btn-primary {
+  @apply w-full bg-gradient-to-r from-[#d4af37] to-[#c49b2c] text-black font-semibold px-6 py-3.5 rounded-xl text-sm transition-all duration-300 active:scale-[0.98];
+}
+.btn-primary:hover { @apply brightness-110; }
+.btn-primary:disabled { @apply opacity-40 cursor-not-allowed; }
+
+.btn-secondary {
+  @apply bg-[#1a1a1a] border border-[#333] text-[#e8dcc8] font-medium px-4 py-3 rounded-xl text-sm transition-all duration-200 active:scale-[0.98];
+}
+.btn-secondary:hover { @apply bg-[#222] border-[#444]; }
+
+.btn-ghost {
+  @apply text-[#a89878] font-medium px-3 py-2 rounded-lg text-sm transition-all duration-200;
+}
+.btn-ghost:hover { @apply text-[#d4af37] bg-[#1a1a1a]; }
+
+.btn-emergency {
+  @apply w-full bg-gradient-to-br from-red-600 to-red-700 text-white font-bold px-6 py-5 rounded-2xl text-base transition-all duration-200 active:scale-[0.97] shadow-xl shadow-red-900/30;
+}
+.btn-emergency:hover { @apply brightness-110; }
+
+.input {
+  @apply w-full bg-[#0b0b0b] border border-[#2a2a2a] rounded-xl px-4 py-3 text-sm text-[#f5f0e8] placeholder-[#555] transition-all duration-200;
+}
+.input:focus { @apply outline-none border-[#d4af37]/50 ring-1 ring-[#d4af37]/30; }
+
+.badge {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium;
+}
+.badge-critical { @apply bg-red-500/15 text-red-400 border border-red-500/30; }
+.badge-high { @apply bg-orange-500/15 text-orange-400 border border-orange-500/30; }
+.badge-medium { @apply bg-yellow-500/15 text-yellow-400 border border-yellow-500/30; }
+.badge-low { @apply bg-green-500/15 text-green-400 border border-green-500/30; }
+.badge-gold { @apply bg-[#d4af37]/15 text-[#d4af37] border border-[#d4af37]/30; }
+
+.section-title {
+  @apply text-sm font-semibold text-[#a89878] uppercase tracking-wider mb-3;
+}
+
+/* ── Bottom Nav ──────────────────────────────────── */
+
+.bottom-nav {
+  @apply fixed bottom-0 left-0 right-0 bg-[#0b0b0b]/95 backdrop-blur-xl border-t border-[#1e1e1e] z-50;
+}
+
+.bottom-nav-inner {
+  max-width: 480px;
+  margin: 0 auto;
+  @apply flex items-center justify-around py-2 px-2;
+}
+
+.nav-btn {
+  @apply flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-[#666] transition-all duration-200;
+}
+.nav-btn:hover { @apply text-[#a89878]; }
+.nav-btn.active { @apply text-[#d4af37]; }
+.nav-btn.active .nav-indicator {
+  @apply w-1 h-1 rounded-full bg-[#d4af37] mt-0.5;
+}
+.nav-btn .nav-label { @apply text-[10px] font-medium; }
+
+/* ── Emergency Pulse ─────────────────────────────── */
+
+.emergency-pulse {
+  animation: emergency-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes emergency-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+}
+
+/* ── Alert Card ──────────────────────────────────── */
+
+.alert-card {
+  @apply bg-red-500/10 border border-red-500/25 rounded-xl p-3;
+  animation: alert-slide 0.4s ease-out;
+}
+
+@keyframes alert-slide {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Service Card ────────────────────────────────── */
+
+.service-card {
+  @apply bg-[#141414] border border-[#222] rounded-xl p-4 transition-all duration-200 active:scale-[0.97] cursor-pointer;
+}
+.service-card:hover { @apply border-[#333] bg-[#181818]; }
+
+/* ── Floor Plan ──────────────────────────────────── */
+
+.floor-plan-container {
+  @apply bg-[#0a0a0a] border border-[#222] rounded-2xl p-4 relative overflow-hidden;
+  aspect-ratio: 4/3;
+}
+
+.floor-area {
+  @apply absolute rounded-lg border transition-all duration-200 flex items-center justify-center text-center;
+  font-size: 8px;
+}
+
+.floor-exit {
+  @apply absolute w-3 h-3 rounded-full bg-green-500 border-2 border-green-300;
+  animation: exit-pulse 2s ease-in-out infinite;
+}
+
+.floor-stairwell {
+  @apply absolute w-3 h-3 rounded border-2 border-blue-400 bg-blue-500/30;
+}
+
+@keyframes exit-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ── Login ───────────────────────────────────────── */
+
+.login-container {
+  @apply min-h-screen flex flex-col items-center justify-center px-6;
+  background: radial-gradient(ellipse at 50% 0%, rgba(212, 175, 55, 0.06) 0%, transparent 70%),
+              linear-gradient(180deg, #0b0b0b 0%, #0f0d08 100%);
+}
+
+.login-card {
+  @apply w-full max-w-sm bg-[#111111] border border-[#222] rounded-3xl p-8;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 175, 55, 0.05);
+}
+
+/* ── Step Card ───────────────────────────────────── */
+
+.step-card {
+  @apply flex items-start gap-3 bg-[#111] border border-[#222] rounded-xl px-4 py-3 text-sm text-[#ccc];
+}
+
+.step-number {
+  @apply w-6 h-6 rounded-full bg-[#d4af37]/15 text-[#d4af37] flex items-center justify-center text-xs font-bold flex-shrink-0;
+}

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import IncidentCard from './IncidentCard';
 import SimulatorModal from './SimulatorModal';
-import AgentResponseServicePanel from './AgentResponseServicePanel';
+import DispatchMonitor from './DispatchMonitor';
 import { API_BASE_URL } from '../config';
 
 const SOCKET_SERVER_URL = API_BASE_URL;
@@ -220,7 +220,7 @@ function Dashboard({ onIncidentCountChange }) {
           {/* Left Panel */}
           <div className="xl:col-span-4 2xl:col-span-3 space-y-6">
             {/* AI Assistant Panel */}
-            <AgentResponseServicePanel />
+            <DispatchMonitor />
 
             {/* Engine Info Card */}
             <div className="card p-4">
