@@ -7,6 +7,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError
 from collections import deque
 from detector import MockDetector
+from local_ml import infer_ml_metadata
 
 # Configuration
 FPS_TARGET = 5  # Reduced from 10 — mock detector doesn't need high FPS
@@ -124,6 +125,7 @@ def main():
 
         # 1. Run "Fast Lightweight CV Model"
         signals = detector.process_frame(frame)
+        ml_meta = infer_ml_metadata(frame, signals)
         
         # 2. Add to Rolling Temporal Buffer
         buffer.add(signals)
@@ -154,14 +156,15 @@ def main():
 
             payload = {
                 "source": "sensor_cctv",
-                "location": "Main Lobby Camera A",
+                "location": detector.zone["name"],
                 "description": description,
                 "sensorSignals": {
                     "smokeDensity": round(buffer.get_average("smoke_score"), 3),
                     "occupancyCount": avg_people,
                     "exitBlocked": current_exit_blocked,
                     "waterLevel": round(buffer.get_average("water_level"), 3),
-                }
+                },
+                "ml": ml_meta,
             }
 
             # State-change dedup: only dispatch if the hazard signature changed
@@ -173,7 +176,10 @@ def main():
                 def on_success(resp):
                     band = resp.get("priorityBand", "?")
                     latency = resp.get("latencyMs", "?")
-                    print(f"  ✅ Dispatched #{dispatch_count} → {band} Priority ({latency}ms backend)")
+                    policy = resp.get("enrichmentPolicy", "?")
+                    pending = resp.get("enrichmentPending", False)
+                    enrich = "LLM pending" if pending else f"no LLM ({policy})"
+                    print(f"  ✅ Dispatched #{dispatch_count} → {band} ({latency}ms) | {enrich}")
 
                 def on_error(err):
                     print(f"  ⚠️ Dispatch failed: {err}")

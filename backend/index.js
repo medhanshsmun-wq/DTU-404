@@ -2,7 +2,7 @@
 // SERVER — Main Entry Point (Unified Priority Engine)
 // ============================================================
 // Pipeline: Input → AI/Deterministic → Unified Scoring → Overrides → Dashboard
-// CCTV:     Deterministic classify → Score → Broadcast → Async LLM enrich
+// CCTV:     Deterministic classify → Score → Broadcast → Async LLM enrich (gated)
 // Feeds:    Weather + Earthquake + Sensor → Auto-Incident (parallel)
 // Rerank:   Variable cadence per incident type (2-30 seconds)
 // ============================================================
@@ -14,12 +14,28 @@ import cors from "cors";
 import dotenv from "dotenv";
 
 import { analyzeIncident, generateSummaryFromCV, classifyFromCVSignals } from "./ai.js";
+import {
+  shouldCallLLMForCVEnrichment,
+  recordSuccessfulCctvLlmEnrichment,
+} from "./cctvEnrichmentPolicy.js";
 import { scoreIncident, detectDomain, computeCompoundModifier, computeConfidence } from "./unifiedScoring.js";
 import { startWeatherFeed, getCurrentWeather, checkWeatherThresholds } from "./feeds/weatherFeed.js";
 import { startEarthquakeFeed, getSeismicStatus, getLatestQuakes, checkEarthquakeThresholds } from "./feeds/earthquakeFeed.js";
 import { startSensorSimulator, stopSensorSimulator, isSensorSimulatorRunning, checkSensorEvents, getSensorState } from "./feeds/sensorSimulator.js";
 import { runCCTVAnalysis, setCCTVScenario } from "./feeds/cctvAnalyzer.js";
 import { llmCache, cvCache } from "./cache.js";
+import {
+  dispatchIncident, acknowledgeDispatch, resolveDispatch,
+  getDispatchLog, getActiveDispatches, getDispatchByIncidentId, getAuthorities,
+  getCallLog, getPersonnelDeployments, getPersonnelRoster, getVoiceScripts,
+} from "./dispatchEngine.js";
+import {
+  authenticateGuest, validateSession, getGuestProfile,
+  updateGuestLocation, getMovementHistory, getAllZones,
+  createServiceRequest, getServiceRequests, getServiceTypes,
+  getEmergencyPlans, getFloorPlans, getGuestAlerts,
+  getActiveGuestSessions,
+} from "./guestService.js";
 
 dotenv.config();
 
@@ -122,6 +138,25 @@ async function processIncident(description, location, source = "manual") {
   return incident;
 }
 
+/**
+ * After an incident is scored and stored, dispatch it to authorities.
+ */
+function autoDispatch(incident) {
+  const dispatch = dispatchIncident(incident);
+  io.emit("dispatch_update", dispatch);
+  // Notify guest namespace of zone-relevant alerts
+  guestIo.emit("alert_update", {
+    id: incident.id,
+    type: incident.hazardType,
+    tier: incident.tier,
+    location: incident.location,
+    description: incident.rawDescription,
+    timestamp: incident.timestamp,
+    score: incident.score ?? incident.finalPriority ?? 0,
+  });
+  return dispatch;
+}
+
 // ── API Routes ─────────────────────────────────────────────
 
 // Simulate / manual report
@@ -134,6 +169,7 @@ app.post("/api/incidents/simulate", async (req, res) => {
     const incident = await processIncident(description, location, "manual");
     activeIncidents.push(incident);
     broadcastIncidents();
+    autoDispatch(incident);
     res.json(incident);
   } catch (err) {
     console.error("[Pipeline] Error:", err.message);
@@ -191,7 +227,7 @@ app.post("/api/cctv/scenario", (req, res) => {
 // Hot-path: deterministic classify → unified score → broadcast (~5ms)
 // Background: async LLM enrichment → update incident → re-broadcast
 app.post("/api/cctv/stream_event", async (req, res) => {
-  const { source, location, description, sensorSignals } = req.body;
+  const { source, location, description, sensorSignals, ml, forceLlmEnrich } = req.body;
 
   if (!description) return res.status(400).json({ error: "Missing CV state description" });
 
@@ -199,7 +235,11 @@ app.post("/api/cctv/stream_event", async (req, res) => {
 
   try {
     // 1. DETERMINISTIC classification — V/S/I/H/L/P (~1ms)
+    // Optional `ml` from edge model: { confidence, topLabels?, version? } — used for LLM gating only here
     const classification = classifyFromCVSignals(sensorSignals || {}, description);
+    if (ml && typeof ml.confidence === "number") {
+      classification.confidence = Math.max(classification.confidence, ml.confidence);
+    }
 
     // 2. Build incident for unified scoring
     const incidentForScoring = {
@@ -233,6 +273,7 @@ app.post("/api/cctv/stream_event", async (req, res) => {
       existing.explanation = classification.explanation;
       existing.recommendedActions = classification.recommendedActions;
       existing.aiConfidence = classification.confidence;
+      existing.mlHints = ml || existing.mlHints;
       Object.assign(existing, scoring);
       incident = existing;
       console.log(`[CCTV Fast] Updated ${existing.id} | ${scoring.tier} (${scoring.score}) | ${Date.now() - startTime}ms`);
@@ -255,13 +296,24 @@ app.post("/api/cctv/stream_event", async (req, res) => {
         explanation: classification.explanation,
         recommendedActions: classification.recommendedActions,
         sensorSignals: sensorSignals || {},
+        mlHints: ml || null,
       };
       activeIncidents.push(incident);
       console.log(`[CCTV Fast] New ${incident.id} | ${scoring.tier} (${scoring.score}) | V=${scoring.factors.V} S=${scoring.factors.S} I=${scoring.factors.I} | ${Date.now() - startTime}ms`);
+      autoDispatch(incident);
     }
 
     // 5. Broadcast immediately (dashboard gets update in ~5ms)
     broadcastIncidents();
+
+    const enrichDecision = shouldCallLLMForCVEnrichment({
+      dedupKey: key,
+      tier: scoring.tier,
+      isCompound: classification.isCompound,
+      classificationConfidence: classification.confidence,
+      mlConfidence: ml && typeof ml.confidence === "number" ? ml.confidence : undefined,
+      force: Boolean(forceLlmEnrich),
+    });
 
     // 6. Respond to Python pipeline immediately
     res.json({
@@ -272,42 +324,48 @@ app.post("/api/cctv/stream_event", async (req, res) => {
       finalPriority: incident.finalPriority,
       factors: incident.factors,
       latencyMs: Date.now() - startTime,
-      enrichmentPending: true,
+      enrichmentPending: enrichDecision.call,
+      enrichmentPolicy: enrichDecision.reason,
     });
 
-    // 7. ASYNC LLM enrichment (fire-and-forget, non-blocking)
-    const cvState = { location, description, sensorSignals };
-    const environmentContext = { weather: getCurrentWeather(), seismic: getSeismicStatus() };
+    // 7. ASYNC LLM enrichment (gated — autonomous CV path avoids constant API use)
+    if (enrichDecision.call) {
+      const cvState = { location, description, sensorSignals };
+      const environmentContext = { weather: getCurrentWeather(), seismic: getSeismicStatus() };
 
-    generateSummaryFromCV(cvState, environmentContext)
-      .then((aiEnriched) => {
-        // Merge LLM enrichment into the existing incident
-        incident.explanation = aiEnriched.explanation || incident.explanation;
-        incident.recommendedActions = aiEnriched.recommendedActions || incident.recommendedActions;
-        incident.aiConfidence = aiEnriched.confidence || incident.aiConfidence;
-        incident._enrichedAt = new Date().toISOString();
+      generateSummaryFromCV(cvState, environmentContext)
+        .then((aiEnriched) => {
+          recordSuccessfulCctvLlmEnrichment(key);
+          // Merge LLM enrichment into the existing incident
+          incident.explanation = aiEnriched.explanation || incident.explanation;
+          incident.recommendedActions = aiEnriched.recommendedActions || incident.recommendedActions;
+          incident.aiConfidence = aiEnriched.confidence || incident.aiConfidence;
+          incident._enrichedAt = new Date().toISOString();
 
-        // Re-score with LLM factors if they're better
-        if (aiEnriched.liveFactors) {
-          const enrichedScoring = scoreIncident({
-            ...incidentForScoring,
-            liveFactors: aiEnriched.liveFactors,
-            confidence: aiEnriched.confidence,
-          }, activeIncidents);
+          // Re-score with LLM factors if they're better
+          if (aiEnriched.liveFactors) {
+            const enrichedScoring = scoreIncident({
+              ...incidentForScoring,
+              liveFactors: aiEnriched.liveFactors,
+              confidence: aiEnriched.confidence,
+            }, activeIncidents);
 
-          // Take the higher score (deterministic vs LLM)
-          if (enrichedScoring.score > incident.score) {
-            Object.assign(incident, enrichedScoring);
+            // Take the higher score (deterministic vs LLM)
+            if (enrichedScoring.score > incident.score) {
+              Object.assign(incident, enrichedScoring);
+            }
           }
-        }
 
-        // Re-broadcast with enriched data
-        broadcastIncidents();
-        console.log(`[CCTV Enrich] LLM merged for ${incident.id} (+${Date.now() - startTime}ms total)`);
-      })
-      .catch((err) => {
-        console.warn(`[CCTV Enrich] LLM enrichment failed (non-critical): ${err.message}`);
-      });
+          // Re-broadcast with enriched data
+          broadcastIncidents();
+          console.log(`[CCTV Enrich] LLM merged for ${incident.id} (+${Date.now() - startTime}ms total)`);
+        })
+        .catch((err) => {
+          console.warn(`[CCTV Enrich] LLM enrichment failed (non-critical): ${err.message}`);
+        });
+    } else {
+      console.log(`[CCTV Enrich] Skipped LLM (${enrichDecision.reason}) for ${incident.id}`);
+    }
 
   } catch (err) {
     console.error("[CCTV Fast] Error:", err.message);
@@ -359,6 +417,7 @@ app.post("/api/cctv/trigger", async (req, res) => {
 
       activeIncidents.push(incident);
       broadcastIncidents();
+      autoDispatch(incident);
       res.json(incident);
     } else {
       res.json({ message: "No incident detected by CCTV" });
@@ -381,6 +440,182 @@ app.patch("/api/incidents/:id", (req, res) => {
   res.json(incident);
 });
 
+// ── Dispatch Routes ───────────────────────────────────────
+
+app.get("/api/dispatch/log", (req, res) => {
+  res.json(getDispatchLog(parseInt(req.query.limit) || 50));
+});
+
+app.get("/api/dispatch/active", (req, res) => {
+  res.json(getActiveDispatches());
+});
+
+app.get("/api/dispatch/authorities", (req, res) => {
+  res.json(getAuthorities());
+});
+
+app.post("/api/dispatch/:incidentId/acknowledge", (req, res) => {
+  const { incidentId } = req.params;
+  const { authorityId } = req.body;
+  const result = acknowledgeDispatch(incidentId, authorityId);
+  if (!result) return res.status(404).json({ error: "Dispatch not found" });
+  io.emit("dispatch_update", result);
+  res.json(result);
+});
+
+app.post("/api/dispatch/:incidentId/resolve", (req, res) => {
+  const { incidentId } = req.params;
+  const result = resolveDispatch(incidentId);
+  if (!result) return res.status(404).json({ error: "Dispatch not found" });
+  io.emit("dispatch_update", result);
+  res.json(result);
+});
+
+app.get("/api/dispatch/calls", (req, res) => {
+  res.json(getCallLog(parseInt(req.query.limit) || 50));
+});
+
+app.get("/api/dispatch/personnel", (req, res) => {
+  res.json(getPersonnelDeployments(parseInt(req.query.limit) || 50));
+});
+
+app.get("/api/dispatch/roster", (req, res) => {
+  res.json(getPersonnelRoster());
+});
+
+app.get("/api/dispatch/voice-scripts", (req, res) => {
+  res.json(getVoiceScripts());
+});
+
+// ── Guest Routes ──────────────────────────────────────────
+
+app.post("/api/guest/login", (req, res) => {
+  const { room, lastName } = req.body;
+  if (!room || !lastName) return res.status(400).json({ error: "Room and last name required" });
+  const result = authenticateGuest(room, lastName);
+  if (!result.success) return res.status(401).json(result);
+  console.log(`[Guest] ✅ Login: Room ${room} (${result.guest.firstName} ${result.guest.lastName})`);
+  res.json(result);
+});
+
+app.get("/api/guest/profile", (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const profile = getGuestProfile(token);
+  if (!profile) return res.status(401).json({ error: "Invalid or expired session" });
+  res.json(profile);
+});
+
+app.post("/api/guest/location", (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const { zoneId } = req.body;
+  if (!zoneId) return res.status(400).json({ error: "zoneId required" });
+  const result = updateGuestLocation(token, zoneId);
+  if (!result) return res.status(401).json({ error: "Invalid session" });
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+app.get("/api/guest/location/history", (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const history = getMovementHistory(token);
+  if (!history) return res.status(401).json({ error: "Invalid session" });
+  res.json(history);
+});
+
+app.get("/api/guest/zones", (req, res) => {
+  res.json(getAllZones());
+});
+
+app.post("/api/guest/report", async (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const session = validateSession(token);
+  if (!session) return res.status(401).json({ error: "Invalid session" });
+
+  const { category, description, urgency } = req.body;
+  if (!description) return res.status(400).json({ error: "Description required" });
+
+  const guestName = `${session.guest.firstName} ${session.guest.lastName}`;
+  const room = session.guest.room;
+  const zone = getAllZones().find((z) => z.id === session.currentZone);
+  const location = zone ? zone.name : "Unknown";
+  const fullDesc = `[Guest Report — Room ${room}, ${guestName}] ${category ? `(${category}) ` : ""}${description}`;
+
+  try {
+    console.log(`[Guest Report] 📝 Room ${room}: "${description.substring(0, 60)}..."`);
+    const incident = await processIncident(fullDesc, location, "guest_report");
+    activeIncidents.push(incident);
+    broadcastIncidents();
+    autoDispatch(incident);
+    res.json({ success: true, incidentId: incident.id, tier: incident.tier, score: incident.score });
+  } catch (err) {
+    console.error("[Guest Report] Error:", err.message);
+    res.status(500).json({ error: "Failed to process report" });
+  }
+});
+
+app.post("/api/guest/emergency", async (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const session = validateSession(token);
+  if (!session) return res.status(401).json({ error: "Invalid session" });
+
+  const guestName = `${session.guest.firstName} ${session.guest.lastName}`;
+  const room = session.guest.room;
+  const zone = getAllZones().find((z) => z.id === session.currentZone);
+  const location = zone ? zone.name : "Unknown";
+  const { type } = req.body;
+  const emergencyDesc = `[EMERGENCY PANIC BUTTON] Guest ${guestName}, Room ${room}, at ${location}. ${type ? `Type: ${type}.` : ""} Guest has activated the emergency button — immediate response required. This is an unverified emergency report from a hotel guest.`;
+
+  try {
+    console.log(`[Guest Emergency] 🚨 PANIC BUTTON — Room ${room} (${guestName})`);
+    const incident = await processIncident(emergencyDesc, location, "guest_emergency");
+    activeIncidents.push(incident);
+    broadcastIncidents();
+    autoDispatch(incident);
+    res.json({ success: true, incidentId: incident.id, tier: incident.tier, message: "Emergency alert dispatched. Help is on the way." });
+  } catch (err) {
+    console.error("[Guest Emergency] Error:", err.message);
+    res.status(500).json({ error: "Failed to process emergency" });
+  }
+});
+
+app.post("/api/guest/service-request", (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const { type, details } = req.body;
+  if (!type) return res.status(400).json({ error: "Service type required" });
+  const result = createServiceRequest(token, type, details);
+  if (!result) return res.status(401).json({ error: "Invalid session" });
+  if (result.error) return res.status(400).json(result);
+  res.json(result);
+});
+
+app.get("/api/guest/service-requests", (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const requests = getServiceRequests(token);
+  res.json(requests);
+});
+
+app.get("/api/guest/service-types", (req, res) => {
+  res.json(getServiceTypes());
+});
+
+app.get("/api/guest/emergency-plans", (req, res) => {
+  res.json(getEmergencyPlans());
+});
+
+app.get("/api/guest/floor-plans", (req, res) => {
+  res.json(getFloorPlans());
+});
+
+app.get("/api/guest/alerts", (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const alerts = getGuestAlerts(token, activeIncidents);
+  res.json(alerts);
+});
+
+app.get("/api/guest/sessions", (req, res) => {
+  res.json(getActiveGuestSessions());
+});
+
 // ── WebSocket ──────────────────────────────────────────────
 
 function broadcastIncidents() {
@@ -388,6 +623,7 @@ function broadcastIncidents() {
   io.emit("incidents_update", sorted);
 }
 
+// Main namespace (employee dashboard)
 io.on("connection", (socket) => {
   console.log("[WS] Dashboard connected:", socket.id);
   broadcastIncidents();
@@ -396,16 +632,50 @@ io.on("connection", (socket) => {
     seismic: getSeismicStatus(),
   });
   socket.emit("feed_status", { autoFeedEnabled, sensorSimulatorRunning: isSensorSimulatorRunning() });
+  socket.emit("dispatch_log", getDispatchLog(20));
 
   socket.on("resolve_incident", (id) => {
     activeIncidents = activeIncidents.map((inc) =>
       inc.id === id ? { ...inc, status: "Resolved", lastUpdated: new Date().toISOString() } : inc
     );
+    resolveDispatch(id);
     broadcastIncidents();
   });
 
   socket.on("disconnect", () => {
     console.log("[WS] Dashboard disconnected:", socket.id);
+  });
+});
+
+// Guest namespace
+const guestIo = io.of("/guest");
+guestIo.on("connection", (socket) => {
+  console.log("[WS Guest] Guest connected:", socket.id);
+
+  socket.on("authenticate", (token) => {
+    const session = validateSession(token);
+    if (session) {
+      socket.join(`room_${session.guest.room}`);
+      socket.join(`zone_${session.currentZone}`);
+      socket.emit("authenticated", { success: true });
+    } else {
+      socket.emit("authenticated", { success: false });
+    }
+  });
+
+  socket.on("zone_change", ({ token, zoneId }) => {
+    const session = validateSession(token);
+    if (session) {
+      // Leave old zone, join new
+      socket.rooms.forEach((room) => {
+        if (room.startsWith("zone_")) socket.leave(room);
+      });
+      socket.join(`zone_${zoneId}`);
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("[WS Guest] Guest disconnected:", socket.id);
   });
 });
 
@@ -444,6 +714,7 @@ async function continuousRerankLoop() {
       for (const result of results) {
         if (result.status === "fulfilled") {
           activeIncidents.push(result.value);
+          autoDispatch(result.value);
         } else {
           console.warn(`[AutoFeed] Failed to process: ${result.reason?.message}`);
         }
