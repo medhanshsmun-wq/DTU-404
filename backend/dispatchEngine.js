@@ -535,8 +535,8 @@ function buildDeploymentOrder(incident, person, routingKey) {
 
   const categoryOrders = orders[person.role.toLowerCase().includes("security") || person.role.toLowerCase().includes("cctv") ? "security" :
     person.role.toLowerCase().includes("engineer") || person.role.toLowerCase().includes("electrical") || person.role.toLowerCase().includes("hvac") || person.role.toLowerCase().includes("fire sys") ? "engineering" :
-    person.role.toLowerCase().includes("doctor") || person.role.toLowerCase().includes("nurse") || person.role.toLowerCase().includes("first aid") ? "medical" :
-    "management"];
+      person.role.toLowerCase().includes("doctor") || person.role.toLowerCase().includes("nurse") || person.role.toLowerCase().includes("first aid") ? "medical" :
+        "management"];
 
   if (!categoryOrders) return `DEPLOY to ${location}. Respond to ${hazard}. Await further instructions from duty manager.`;
 
