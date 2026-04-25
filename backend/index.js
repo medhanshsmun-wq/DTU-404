@@ -553,6 +553,27 @@ app.post("/api/guest/report", async (req, res) => {
   }
 });
 
+app.post("/api/guest/resolve", (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const session = validateSession(token);
+  if (!session) return res.status(401).json({ error: "Invalid session" });
+
+  const { incidentId } = req.body;
+  if (!incidentId) return res.status(400).json({ error: "Incident ID required" });
+
+  const incident = activeIncidents.find((inc) => inc.id === incidentId && inc.status === "Active");
+  if (!incident) return res.status(404).json({ error: "Active incident not found" });
+
+  console.log(`[Guest Resolve] 🛑 Guest resolved incident ${incidentId}`);
+  incident.status = "Resolved";
+  incident.lastUpdated = new Date().toISOString();
+  
+  resolveDispatch(incidentId);
+  broadcastIncidents();
+  
+  res.json({ success: true, incidentId });
+});
+
 app.post("/api/guest/emergency", async (req, res) => {
   const token = req.headers["x-guest-token"];
   const session = validateSession(token);
@@ -751,6 +772,15 @@ async function continuousRerankLoop() {
       incident._lastRerankedAt = now;
 
       if (Math.abs(oldScore - newScoring.score) > 0.1) {
+        anyChanged = true;
+      }
+
+      // Auto-resolve if score drops below 1.5
+      if (newScoring.score < 1.5) {
+        console.log(`[AI Auto-Resolve] 🛑 Incident ${incident.id} priority dropped below threshold. Auto-resolving.`);
+        incident.status = "Resolved";
+        incident.lastUpdated = new Date().toISOString();
+        resolveDispatch(incident.id);
         anyChanged = true;
       }
     }

@@ -114,6 +114,13 @@ function EmergencyPlansPage() {
                         <Phone className="w-4 h-4 text-[#888]" />
                         <span className="text-[11px] text-[#999]">{plan.emergencyContact}</span>
                       </div>
+
+                      {/* Schematic */}
+                      {plan.schematic && (
+                        <div className="mt-3 overflow-hidden rounded-xl border border-[#222]">
+                          <img src={plan.schematic} alt={`${plan.title} Schematic`} className="w-full h-auto object-cover" />
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 )}

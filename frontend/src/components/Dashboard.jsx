@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -25,18 +25,26 @@ function Dashboard({ onIncidentCountChange }) {
   const [selectedView, setSelectedView] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const socketRef = useRef(null);
+
   useEffect(() => {
-    const socket = io(SOCKET_SERVER_URL);
-    socket.on('connect', () => setIsConnected(true));
-    socket.on('disconnect', () => setIsConnected(false));
-    socket.on('incidents_update', (data) => setIncidents(data));
-    socket.on('environment_update', (data) => {
+    socketRef.current = io(SOCKET_SERVER_URL);
+    socketRef.current.on('connect', () => setIsConnected(true));
+    socketRef.current.on('disconnect', () => setIsConnected(false));
+    socketRef.current.on('incidents_update', (data) => setIncidents(data));
+    socketRef.current.on('environment_update', (data) => {
       if (data.weather) setWeather(data.weather);
       if (data.seismic) setSeismic(data.seismic);
     });
-    socket.on('feed_status', (data) => setAutoFeedEnabled(data.autoFeedEnabled));
-    return () => socket.disconnect();
+    socketRef.current.on('feed_status', (data) => setAutoFeedEnabled(data.autoFeedEnabled));
+    return () => socketRef.current.disconnect();
   }, []);
+
+  const handleResolve = (id) => {
+    if (socketRef.current) {
+      socketRef.current.emit('resolve_incident', id);
+    }
+  };
 
   const activeIncidents = useMemo(() => incidents.filter(i => i.status === "Active"), [incidents]);
   
@@ -316,7 +324,7 @@ function Dashboard({ onIncidentCountChange }) {
                       transition={{ duration: 0.2, delay: index * 0.03 }}
                       layout
                     >
-                      <IncidentCard incident={incident} />
+                      <IncidentCard incident={incident} onResolve={handleResolve} />
                     </motion.div>
                   ))
                 )}

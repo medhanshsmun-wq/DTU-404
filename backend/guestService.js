@@ -290,6 +290,7 @@ export function getEmergencyPlans() {
       ],
       assemblyPoint: "Gateway Terrace (near Gateway of India)",
       emergencyContact: "Hotel Security: EXT-100 | Fire: 101",
+      schematic: "/schematics/fire.png",
     },
     {
       id: "earthquake",
@@ -311,6 +312,7 @@ export function getEmergencyPlans() {
       ],
       assemblyPoint: "Heritage Garden (open area, away from structures)",
       emergencyContact: "Hotel Security: EXT-100 | Emergency: 112",
+      schematic: "/schematics/earthquake.png",
     },
     {
       id: "flood",
@@ -332,6 +334,7 @@ export function getEmergencyPlans() {
       ],
       assemblyPoint: "Tower Wing Floor 3 Corridor (interior safe zone)",
       emergencyContact: "Hotel Security: EXT-100 | Civil Defense: +91-22-22694725",
+      schematic: "/schematics/flood.png",
     },
     {
       id: "medical",
@@ -353,6 +356,7 @@ export function getEmergencyPlans() {
       ],
       assemblyPoint: "Not applicable — stay at patient's location",
       emergencyContact: "Hotel Medical: EXT-300 | Ambulance: 108 | Emergency: 112",
+      schematic: "/schematics/medical.png",
     },
     {
       id: "security",
@@ -374,6 +378,7 @@ export function getEmergencyPlans() {
       ],
       assemblyPoint: "In-room shelter-in-place until all-clear",
       emergencyContact: "Hotel Security: EXT-100 | Police: 100 | Emergency: 112",
+      schematic: "/schematics/security.png",
     },
   ];
 }
