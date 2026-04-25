@@ -77,7 +77,7 @@ const AUTONOMY_LABELS = {
   A4: "Escalate",
 };
 
-function IncidentCard({ incident }) {
+function IncidentCard({ incident, onResolve }) {
   const [expanded, setExpanded] = useState(false);
   const tier = TIER_CONFIG[incident.tier || incident.priorityBand] || TIER_CONFIG.Low;
   const score = incident.score ?? incident.finalPriority ?? 0;
@@ -234,14 +234,26 @@ function IncidentCard({ incident }) {
           </div>
         )}
 
-        {/* Expand Toggle */}
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="mt-3 text-[11px] text-[#525252] hover:text-white flex items-center gap-1 transition-colors"
-        >
-          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          {expanded ? "Show less" : "Show details"}
-        </button>
+        {/* Actions Row */}
+        <div className="mt-3 flex items-center justify-between">
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-[11px] text-[#525252] hover:text-white flex items-center gap-1 transition-colors"
+          >
+            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {expanded ? "Show less" : "Show details"}
+          </button>
+          
+          {onResolve && (
+            <button
+              onClick={() => onResolve(incident.id)}
+              className="text-[11px] font-medium px-2.5 py-1 bg-[#1a1a1a] hover:bg-green-500/20 text-[#a1a1a1] hover:text-green-400 border border-[#262626] hover:border-green-500/30 rounded flex items-center gap-1.5 transition-all"
+            >
+              <CheckCircle className="w-3 h-3" />
+              Mark as Resolved
+            </button>
+          )}
+        </div>
 
         {/* Expanded Content */}
         <AnimatePresence>
