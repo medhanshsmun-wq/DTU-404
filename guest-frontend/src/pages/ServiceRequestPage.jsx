@@ -33,13 +33,21 @@ function ServiceRequestPage() {
   const [serviceTypes, setServiceTypes] = useState([]);
   const [requests, setRequests] = useState([]);
   const [selectedType, setSelectedType] = useState(null);
+  const [selectedItems, setSelectedItems] = useState([]);
   const [details, setDetails] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
     api('/api/guest/service-types').then(setServiceTypes);
-    api('/api/guest/service-requests').then(setRequests);
+    
+    const fetchRequests = () => {
+      api('/api/guest/service-requests').then(setRequests).catch(() => {});
+    };
+    
+    fetchRequests();
+    const interval = setInterval(fetchRequests, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleSubmit = async () => {
@@ -48,11 +56,12 @@ function ServiceRequestPage() {
     try {
       const result = await api('/api/guest/service-request', {
         method: 'POST',
-        body: JSON.stringify({ type: selectedType, details }),
+        body: JSON.stringify({ type: selectedType, details, items: selectedItems }),
       });
       if (result.id) {
         setSuccessMsg(`${result.typeName} request submitted!`);
         setSelectedType(null);
+        setSelectedItems([]);
         setDetails('');
         const updated = await api('/api/guest/service-requests');
         setRequests(updated);
@@ -97,7 +106,15 @@ function ServiceRequestPage() {
         {serviceTypes.map((svc) => (
           <button
             key={svc.id}
-            onClick={() => setSelectedType(selectedType === svc.id ? null : svc.id)}
+            onClick={() => {
+              if (selectedType === svc.id) {
+                setSelectedType(null);
+                setSelectedItems([]);
+              } else {
+                setSelectedType(svc.id);
+                setSelectedItems([]);
+              }
+            }}
             className={`service-card text-center ${
               selectedType === svc.id ? 'border-[#d4af37]/50 bg-[#d4af37]/5' : ''
             }`}
@@ -117,6 +134,36 @@ function ServiceRequestPage() {
       {/* Details + Submit */}
       {selectedType && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3 mb-6">
+          {serviceTypes.find(s => s.id === selectedType)?.items?.length > 0 && (
+            <div className="bg-[#111] border border-[#1a1a1a] rounded-xl p-3 mb-3">
+               <h3 className="text-xs font-semibold text-[#ccc] mb-2 uppercase tracking-wider">Select Items</h3>
+               <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar">
+                 {serviceTypes.find(s => s.id === selectedType).items.map(item => {
+                   const isSelected = selectedItems.some(i => i.id === item.id);
+                   return (
+                     <div key={item.id} className="flex items-center justify-between p-2 rounded-lg bg-[#1a1a1a]">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-white">{item.name}</p>
+                          <p className="text-[10px] text-[#888]">${item.price}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedItems(prev => prev.filter(i => i.id !== item.id));
+                            } else {
+                              setSelectedItems(prev => [...prev, item]);
+                            }
+                          }}
+                          className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors ${isSelected ? 'bg-[#d4af37] text-black' : 'bg-[#333] text-white'}`}
+                        >
+                          {isSelected ? <CheckCircle className="w-3 h-3" /> : '+'}
+                        </button>
+                     </div>
+                   );
+                 })}
+               </div>
+            </div>
+          )}
           <textarea
             value={details}
             onChange={(e) => setDetails(e.target.value)}
@@ -147,6 +194,9 @@ function ServiceRequestPage() {
                 <ServiceIcon name={req.typeIcon} className="w-5 h-5 text-[#d4af37]" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-[#ccc]">{req.typeName}</p>
+                  {req.items && req.items.length > 0 && (
+                    <p className="text-[10px] text-[#888] truncate">{req.items.length} items</p>
+                  )}
                   {req.details && <p className="text-[10px] text-[#666] truncate">{req.details}</p>}
                 </div>
                 <div className="text-right flex-shrink-0">
@@ -157,7 +207,11 @@ function ServiceRequestPage() {
                   }`}>
                     {req.status === 'pending' ? (
                       <><Clock className="w-2.5 h-2.5" /> Pending</>
-                    ) : req.status}
+                    ) : req.status === 'completed' ? (
+                      <><CheckCircle className="w-2.5 h-2.5" /> Completed</>
+                    ) : (
+                      req.status.replace('_', ' ').toUpperCase()
+                    )}
                   </span>
                 </div>
               </div>

@@ -55,6 +55,14 @@ function AuthProvider({ children }) {
       });
     });
 
+    socket.on('alert_resolved_by_hotel', (data) => {
+      setAlerts((prev) => 
+        prev.map(alert => 
+          alert.id === data.id ? { ...alert, hotelResolved: true, resolutionMessage: data.message } : alert
+        )
+      );
+    });
+
     socket.on('authenticated', (data) => {
       if (!data.success) {
         logout();

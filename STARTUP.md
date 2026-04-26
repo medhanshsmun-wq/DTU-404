@@ -68,21 +68,8 @@ git push origin main
 
 ---
 
-## Optional: Quick Start Script (Mac/Linux)
+## Quick Start / Git Scripts
 
-If you'd like to start all servers with a single script, you can create a `start.sh` in the root folder with this content:
-
-```bash
-#!/bin/bash
-echo "Starting Backend..."
-cd backend && npm install && npm start &
-
-echo "Starting Frontend..."
-cd ../frontend && npm install && npm run dev &
-
-echo "Starting Guest Frontend..."
-cd ../guest-frontend && npm install && npm run dev &
-
-wait
-```
-*Make sure to run `chmod +x start.sh` to make it executable.*
+There are two included scripts in the root directory that automate these processes:
+- `./start_servers.sh` : Starts the Backend, Operator Dashboard, and Guest App simultaneously.
+- `./push_to_git.sh` : Automatically prompts for a commit message and pushes to your repository.

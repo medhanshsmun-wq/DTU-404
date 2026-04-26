@@ -13,7 +13,7 @@ import { Server } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
 
-import { analyzeIncident, generateSummaryFromCV, classifyFromCVSignals } from "./ai.js";
+import { analyzeIncident, generateSummaryFromCV, classifyFromCVSignals, analyzeMedicalCCTVImage, analyzeSecurityFrame } from "./ai.js";
 import {
   shouldCallLLMForCVEnrichment,
   recordSuccessfulCctvLlmEnrichment,
@@ -27,15 +27,17 @@ import { llmCache, cvCache } from "./cache.js";
 import {
   dispatchIncident, acknowledgeDispatch, resolveDispatch,
   getDispatchLog, getActiveDispatches, getDispatchByIncidentId, getAuthorities,
-  getCallLog, getPersonnelDeployments, getPersonnelRoster, getVoiceScripts,
+  getCallLog, getPersonnelDeployments, getPersonnelRoster, getVoiceScripts, initDispatchData
 } from "./dispatchEngine.js";
 import {
   authenticateGuest, validateSession, getGuestProfile,
   updateGuestLocation, getMovementHistory, getAllZones,
   createServiceRequest, getServiceRequests, getServiceTypes,
   getEmergencyPlans, getFloorPlans, getGuestAlerts,
-  getActiveGuestSessions,
+  getActiveGuestSessions, initGuestData,
+  getAllServiceRequestsAdmin, updateServiceRequestStatusAdmin
 } from "./guestService.js";
+import store from "./store.js";
 
 dotenv.config();
 
@@ -48,9 +50,26 @@ const io = new Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
 });
 
+// Guest namespace
+const guestIo = io.of("/guest");
+
 // ── State ──────────────────────────────────────────────────
 let activeIncidents = [];
 let autoFeedEnabled = false;
+
+function initIndexData() {
+  activeIncidents = store.loadData('incidents', []);
+  autoFeedEnabled = store.loadData('autoFeedEnabled', false);
+}
+
+// Save helpers
+function saveIncidents() {
+  store.saveData('incidents', activeIncidents);
+}
+
+function saveSettings() {
+  store.saveData('autoFeedEnabled', autoFeedEnabled);
+}
 
 // ── Helpers ────────────────────────────────────────────────
 function genId() {
@@ -223,9 +242,55 @@ app.post("/api/cctv/scenario", (req, res) => {
   res.json({ success: true, scenario });
 });
 
+// ── Medical CCTV Gemini Verification ─────────
+app.post("/api/cctv/verify_medical", async (req, res) => {
+  const { frameBase64, mimeType } = req.body;
+  if (!frameBase64) return res.status(400).json({ error: "Missing frameBase64" });
+  
+  try {
+    const result = await analyzeMedicalCCTVImage(frameBase64, mimeType || "image/jpeg");
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Security Scanner API ───────────────
+app.post("/api/security/scan", async (req, res) => {
+  const { frameBase64, mimeType } = req.body;
+  if (!frameBase64) return res.status(400).json({ error: "Missing frameBase64" });
+  
+  try {
+    const result = await analyzeSecurityFrame(frameBase64, mimeType || "image/jpeg");
+    
+    // If threat is high, automatically create a real system incident
+    if (result.threatLevel >= 7) {
+      console.log(`[Security Scanner] 🚨 High threat detected (${result.threatLevel}/10). Creating system incident.`);
+      const incident = await processIncident(
+        `[SECURITY SCANNER ALERT] ${result.fullReport}`, 
+        "Security Console Live Feed",
+        "security_scanner"
+      );
+      
+      // Merge vision findings into incident
+      incident.sensorSignals = {
+        ...incident.sensorSignals,
+        threatLevel: result.threatLevel,
+        weapons: result.weaponsDetected
+      };
+      
+      activeIncidents.push(incident);
+      broadcastIncidents();
+      autoDispatch(incident);
+    }
+    
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Hybrid CCTV Pipeline Webhook (Unified Engine) ─────────
-// Hot-path: deterministic classify → unified score → broadcast (~5ms)
-// Background: async LLM enrichment → update incident → re-broadcast
 app.post("/api/cctv/stream_event", async (req, res) => {
   const { source, location, description, sensorSignals, ml, forceLlmEnrich } = req.body;
 
@@ -467,7 +532,23 @@ app.post("/api/dispatch/:incidentId/resolve", (req, res) => {
   const { incidentId } = req.params;
   const result = resolveDispatch(incidentId);
   if (!result) return res.status(404).json({ error: "Dispatch not found" });
+  
+  // Find incident to notify guests
+  const incident = activeIncidents.find(inc => inc.id === incidentId);
+  if (incident) {
+    incident.status = "Resolved";
+    incident.lastUpdated = new Date().toISOString();
+    
+    // Notify guests that hotel has resolved it
+    guestIo.emit("alert_resolved_by_hotel", {
+      id: incidentId,
+      message: "The hotel staff has resolved this incident. You may now dismiss this alert.",
+      location: incident.location
+    });
+  }
+
   io.emit("dispatch_update", result);
+  broadcastIncidents();
   res.json(result);
 });
 
@@ -601,12 +682,23 @@ app.post("/api/guest/emergency", async (req, res) => {
 
 app.post("/api/guest/service-request", (req, res) => {
   const token = req.headers["x-guest-token"];
-  const { type, details } = req.body;
+  const { type, details, items } = req.body;
   if (!type) return res.status(400).json({ error: "Service type required" });
-  const result = createServiceRequest(token, type, details);
+  const result = createServiceRequest(token, type, details, items);
   if (!result) return res.status(401).json({ error: "Invalid session" });
   if (result.error) return res.status(400).json(result);
   res.json(result);
+});
+
+app.get("/api/service-requests/all", (req, res) => {
+  res.json(getAllServiceRequestsAdmin());
+});
+
+app.patch("/api/service-requests/:guestId/:reqId", (req, res) => {
+  const { guestId, reqId } = req.params;
+  const { status } = req.body;
+  const success = updateServiceRequestStatusAdmin(guestId, reqId, status);
+  res.json({ success });
 });
 
 app.get("/api/guest/service-requests", (req, res) => {
@@ -625,6 +717,27 @@ app.get("/api/guest/emergency-plans", (req, res) => {
 
 app.get("/api/guest/floor-plans", (req, res) => {
   res.json(getFloorPlans());
+});
+
+
+app.get("/api/guest/reports", (req, res) => {
+  const token = req.headers["x-guest-token"];
+  const session = validateSession(token);
+  if (!session) return res.status(401).json({ error: "Invalid session" });
+  
+  // Return recent guest reports
+  const reports = activeIncidents
+    .filter(inc => inc.source === "guest_report")
+    .map(inc => ({
+      id: inc.id,
+      category: inc.hazardType,
+      description: inc.description,
+      tier: inc.tier,
+      status: inc.status,
+      time: inc.timestamp
+    }));
+  
+  res.json(reports);
 });
 
 app.get("/api/guest/alerts", (req, res) => {
@@ -656,9 +769,19 @@ io.on("connection", (socket) => {
   socket.emit("dispatch_log", getDispatchLog(20));
 
   socket.on("resolve_incident", (id) => {
-    activeIncidents = activeIncidents.map((inc) =>
-      inc.id === id ? { ...inc, status: "Resolved", lastUpdated: new Date().toISOString() } : inc
-    );
+    const incident = activeIncidents.find((inc) => inc.id === id);
+    if (incident) {
+      incident.status = "Resolved";
+      incident.lastUpdated = new Date().toISOString();
+      
+      // Notify guests that hotel has resolved it
+      guestIo.emit("alert_resolved_by_hotel", {
+        id: id,
+        message: "The hotel staff has resolved this incident. You may now dismiss this alert.",
+        location: incident.location
+      });
+    }
+
     resolveDispatch(id);
     broadcastIncidents();
   });
@@ -668,8 +791,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Guest namespace
-const guestIo = io.of("/guest");
+// Guest namespace connection handler
 guestIo.on("connection", (socket) => {
   console.log("[WS Guest] Guest connected:", socket.id);
 
@@ -798,21 +920,110 @@ async function continuousRerankLoop() {
   }
 }
 
+// ── Dashboard API Routes ───────────────────────────────────
+
+
+app.get("/api/dispatch/history", (req, res) => {
+  res.json(getDispatchLog());
+});
+
+app.get("/api/analytics", (req, res) => {
+  // Simple analytics from activeIncidents and dispatchLog
+  const dispatches = getDispatchLog();
+  const critical = activeIncidents.filter(i => i.tier === 'Critical').length;
+  const high = activeIncidents.filter(i => i.tier === 'High').length;
+  const medium = activeIncidents.filter(i => i.tier === 'Medium').length;
+  const low = activeIncidents.filter(i => i.tier === 'Low').length;
+
+  res.json({
+    tierCounts: { critical, high, medium, low },
+    totalIncidents: activeIncidents.length,
+    activeDispatches: dispatches.filter(d => !['Resolved', 'Stand Down'].includes(d.status)).length,
+    avgScore: activeIncidents.length ? (activeIncidents.reduce((s, i) => s + (i.score || 0), 0) / activeIncidents.length).toFixed(1) : 0,
+    sourceDistribution: activeIncidents.reduce((acc, i) => {
+      acc[i.source] = (acc[i.source] || 0) + 1;
+      return acc;
+    }, {})
+  });
+});
+
+app.get("/api/sensors", (req, res) => {
+  res.json({
+    weather: getCurrentWeather(),
+    seismic: getSeismicStatus(),
+    simulator: getSensorState()
+  });
+});
+
+app.get("/api/alerts", (req, res) => {
+  // Synthesize alerts from activeIncidents
+  const alerts = activeIncidents.slice(0, 20).map(inc => ({
+    id: inc.id,
+    message: `Incident in ${inc.location}`,
+    detail: inc.rawDescription,
+    time: inc.timestamp,
+    severity: inc.tier.toLowerCase(),
+    source: inc.source,
+    zone: inc.location
+  }));
+  res.json(alerts);
+});
+
+app.get("/api/settings", (req, res) => {
+  res.json({ autoFeedEnabled });
+});
+
+app.post("/api/settings", (req, res) => {
+  const { autoFeed } = req.body;
+  if (typeof autoFeed === 'boolean') {
+    autoFeedEnabled = autoFeed;
+    if (autoFeed && !isSensorSimulatorRunning()) {
+      startSensorSimulator(io);
+    } else if (!autoFeed && isSensorSimulatorRunning()) {
+      stopSensorSimulator();
+    }
+  }
+  saveSettings();
+  res.json({ autoFeedEnabled });
+});
+
 // ── Boot ───────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`\n🚨 Crisis Response Backend running on port ${PORT}`);
-  console.log("   Engine:   Unified Priority Engine (V/S/I/H/L/P)");
-  console.log("   Pipeline: Deterministic CV → Unified Score → Overrides → Dashboard");
-  console.log("   CCTV:     ~5ms hot-path + async LLM enrichment");
-  console.log("   Rerank:   Continuous (2-30s per incident type)");
-  console.log("   Feeds:    Weather (Open-Meteo) + Earthquake (USGS) + IoT Simulator\n");
 
-  // Start automated data feeds
-  startWeatherFeed();
-  startEarthquakeFeed();
+async function bootServer() {
+  await store.connectDB();
+  await store.loadAllData();
+  
+  initIndexData();
+  initDispatchData();
+  initGuestData();
 
-  // Start the continuous reranking loop
-  setInterval(continuousRerankLoop, BASE_RERANK_INTERVAL_MS);
-});
+  server.listen(PORT, () => {
+    console.log(`\n🚨 Crisis Response Backend running on port ${PORT}`);
+    console.log("   Engine:   Unified Priority Engine (V/S/I/H/L/P)");
+    console.log("   Pipeline: Deterministic CV → Unified Score → Overrides → Dashboard");
+    console.log("   CCTV:     ~5ms hot-path + async LLM enrichment");
+    console.log("   Rerank:   Continuous (2-30s per incident type)");
+    console.log("   Feeds:    Weather (Open-Meteo) + Earthquake (USGS) + IoT Simulator\n");
+
+    // Start automated data feeds
+    startWeatherFeed();
+    startEarthquakeFeed();
+
+    // Start the continuous reranking loop
+    setInterval(continuousRerankLoop, BASE_RERANK_INTERVAL_MS);
+    
+    // Periodically save state to disk
+    setInterval(() => {
+      saveIncidents();
+      saveSettings();
+    }, 5000);
+
+    setInterval(() => {
+      io.emit("dispatch_log", getDispatchLog(20));
+    }, 1000);
+  });
+}
+
+bootServer();

@@ -24,6 +24,8 @@
 //   Security          → Police + Hotel Security
 // ============================================================
 
+import store from "./store.js";
+
 // ── Authority Definitions ─────────────────────────────────
 
 const AUTHORITIES = {
@@ -312,9 +314,25 @@ const DOMAIN_ROUTING = {
 // ── Dispatch State ────────────────────────────────────────
 
 let dispatchLog = [];
-let activeDispatches = new Map(); // incidentId → dispatch record
-let callLog = [];                  // all outgoing voice calls
-let personnelDeployments = [];     // all personnel deployment records
+let activeDispatches = new Map();
+let callLog = [];
+let personnelDeployments = [];
+
+export function initDispatchData() {
+  dispatchLog = store.loadData('dispatchLog', []);
+  activeDispatches = store.arrayToMap(store.loadData('activeDispatches', []));
+  callLog = store.loadData('callLog', []);
+  personnelDeployments = store.loadData('personnelDeployments', []);
+}
+
+function saveDispatchData() {
+  store.saveData('dispatchLog', dispatchLog);
+  store.saveData('activeDispatches', store.mapToArray(activeDispatches));
+  store.saveData('callLog', callLog);
+  store.saveData('personnelDeployments', personnelDeployments);
+}
+
+setInterval(saveDispatchData, 5000);
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -836,4 +854,83 @@ export function getPersonnelRoster() {
  */
 export function getVoiceScripts() {
   return VOICE_SCRIPTS;
+}
+
+
+// ── Demo Simulation Realism ─────────────────────────────────
+// Simulates the timeline of voice calls, personnel deployment, and authority response.
+
+function simulateTimeline() {
+  const now = Date.now();
+  
+  // 1. Voice Calls Timeline
+  for (const call of callLog) {
+    const elapsed = (now - new Date(call.initiatedAt).getTime()) / 1000;
+    
+    if (call.status === "initiated" && elapsed > 2) {
+      call.status = "connected";
+      console.log(`[Dispatch] 📞 Voice call connected to ${call.authorityName}`);
+    } else if (call.status === "connected" && elapsed > 2 + call.durationSec) {
+      call.status = "delivered";
+      console.log(`[Dispatch] 📞 Voice message delivered to ${call.authorityName}`);
+    } else if (call.status === "delivered" && elapsed > 2 + call.durationSec + 2) {
+      call.status = "completed";
+      call.completedAt = new Date().toISOString();
+    }
+  }
+  
+  // 2. Personnel Deployments Timeline
+  for (const dep of personnelDeployments) {
+    if (dep.status === "stood_down") continue;
+    
+    const elapsed = (now - new Date(dep.dispatchedAt).getTime()) / 1000;
+    
+    if (dep.status === "dispatched" && elapsed > 3) {
+      dep.status = "en_route";
+    } else if (dep.status === "en_route" && elapsed > 15) {
+      dep.status = "on_scene";
+      dep.arrivedAt = new Date().toISOString();
+      console.log(`[Dispatch] 👥 ${dep.name} arrived on scene at ${dep.toZone}`);
+    }
+  }
+
+  // 3. Update Active Dispatches Status
+  for (const [id, dispatch] of activeDispatches.entries()) {
+    if (dispatch.status === "resolved") continue;
+    
+    let allOnScene = true;
+    for (const action of dispatch.actions) {
+      const elapsed = (now - new Date(action.dispatchedAt).getTime()) / 1000;
+      if (action.status === "pending" && elapsed > 5) {
+        action.status = "acknowledged";
+        action.acknowledgedAt = new Date().toISOString();
+        console.log(`[Dispatch] 📟 Authority ${action.authorityName} acknowledged dispatch.`);
+      } else if (action.status === "acknowledged" && elapsed > 10) {
+        action.status = "en_route";
+      } else if (action.status === "en_route" && elapsed > 25) { // 25s for demo
+        action.status = "on_scene";
+        action.arrivedAt = new Date().toISOString();
+        console.log(`[Dispatch] 🚓 Authority ${action.authorityName} arrived on scene.`);
+      }
+      if (action.status !== "on_scene") allOnScene = false;
+    }
+    
+    // Sync voice call status back to the dispatch actions
+    for (const vc of dispatch.voiceCalls) {
+      const call = callLog.find(c => c.id === vc.callId);
+      if (call) vc.status = call.status;
+    }
+    for (const action of dispatch.actions) {
+      if (action.voiceCall) {
+        const call = callLog.find(c => c.id === action.voiceCall.callId);
+        if (call) action.voiceCall.status = call.status;
+      }
+    }
+  }
+}
+
+setInterval(simulateTimeline, 1000);
+
+export function getDispatchHistory() {
+  return dispatchLog;
 }

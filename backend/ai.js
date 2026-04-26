@@ -33,6 +33,13 @@ const GEMINI_VISION_MODEL = process.env.GEMINI_VISION_MODEL || GEMINI_TEXT_MODEL
 
 const CV_HAZARD_RULES = [
   {
+    // Medical Emergency: Person Down
+    test: (s) => s.personDown === true,
+    hazardType: "Medical Emergencies",
+    isCompound: false,
+    compoundTypes: [],
+  },
+  {
     // Compound: smoke + blocked exit + water
     test: (s) => s.smokeDensity > 0.5 && s.exitBlocked === true && s.waterLevel > 0.3,
     hazardType: "Fires and Hazards",
@@ -138,12 +145,12 @@ function computeHazardFactorsFromCV(s, rule) {
     s.smokeDensity > 0.7 ? 3 : s.smokeDensity > 0.4 ? 2 : s.waterLevel > 0.5 ? 2 : 0,
     0, 3
   );
-  const C_v = clamp(s.exitBlocked ? 2 : s.smokeDensity > 0.8 ? 1 : 0, 0, 2);
+  const C_v = clamp(s.exitBlocked ? 2 : s.smokeDensity > 0.8 ? 1 : s.personDown ? 2 : 0, 0, 2);
   const O = clamp(
-    s.occupancyCount > 30 ? 3 : s.occupancyCount > 15 ? 2 : s.occupancyCount > 5 ? 1 : 0,
+    s.occupancyCount > 30 ? 3 : s.occupancyCount > 15 ? 2 : s.occupancyCount > 5 ? 1 : s.personDown ? 1 : 0,
     0, 3
   );
-  const V = Math.min(10, A + E_v + C_v + O);
+  const V = Math.min(10, A + E_v + C_v + O + (s.personDown ? 8 : 0)); // High Vital threat if person down
 
   // S = Severity/Spread: min(10, Z + M + D + T)
   //   Z = zone spread (0-4), M = magnitude (0-2), D = damage (0-3), T = trend (0-1)
@@ -236,6 +243,8 @@ function normalizeSensorSignals(signals) {
       String(signals.waterLevel || "0").replace(/m$/i, ""),
       0
     ),
+    personDown: toBool(signals.personDown),
+    helpersNearby: toBool(signals.helpersNearby),
   };
 }
 
@@ -285,6 +294,10 @@ function buildExplanation(s, rule) {
     bullets.push(
       `${s.occupancyCount} people detected in zone`
     );
+  if (s.personDown) {
+    bullets.push(`Possible medical emergency: A person appears collapsed or lying down on the floor.`);
+    if (s.helpersNearby) bullets.push(`Nearby individuals appear to be assisting.`);
+  }
   if (rule.isCompound)
     bullets.push(
       `COMPOUND EVENT: ${rule.compoundTypes.join(" + ")} — cascading risk multiplier applies`
@@ -318,6 +331,11 @@ function buildActions(s, rule) {
     actions.push(
       "Initiate crowd management — open secondary exits and deploy staff"
     );
+  }
+  if (s.personDown) {
+    actions.push("Dispatch hotel medical team to the location immediately");
+    actions.push("Deploy hotel security to secure the area and manage the crowd");
+    actions.push("Prepare AED and emergency medical kit");
   }
   if (actions.length === 0) {
     actions.push("Continue monitoring — dispatch staff for visual verification");
@@ -480,6 +498,52 @@ Respond with the JSON assessment.`;
 }
 
 /**
+ * Analyze a CCTV frame for a potential medical emergency using Gemini Vision.
+ * Returns structured JSON with possibleMedicalEmergency, personDown, helpersNearby, etc.
+ */
+export async function analyzeMedicalCCTVImage(base64Image, mimeType) {
+  try {
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_VISION_MODEL,
+      generationConfig: { responseMimeType: "application/json" },
+    });
+
+    const userPrompt = `Analyze this CCTV frame from a hallway.
+Determine if there is a possible medical emergency. Look for:
+- A person collapsed or lying on the floor (personDown)
+- One or more people nearby assisting or gathered around (helpersNearby)
+
+IMPORTANT: DO NOT claim medical diagnosis certainty (e.g. "heart attack"). Just describe what is visible. If nothing unusual is present, set possibleMedicalEmergency to false.
+
+Return exactly this JSON:
+{
+  "possibleMedicalEmergency": true/false,
+  "personDown": true/false,
+  "helpersNearby": true/false,
+  "peopleCount": <int>,
+  "confidence": <float 0.0-1.0>,
+  "description": "<short factual scene description>"
+}`;
+
+    const result = await model.generateContent([
+      { text: userPrompt },
+      {
+        inlineData: {
+          data: base64Image,
+          mimeType: mimeType
+        }
+      }
+    ]);
+
+    const text = result.response.text();
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("[CCTV AI] Medical Image analysis failed:", error.message);
+    throw error;
+  }
+}
+
+/**
  * Generate human-readable enrichment from CV state using LLM.
  * This is the ASYNC ENRICHMENT path, called AFTER the deterministic
  * classifier has already scored and broadcast the incident.
@@ -538,5 +602,61 @@ Keep it factual based on the CV state.
   } catch (e) {
     console.error("[CCTV AI] Enrichment generation failed:", e.message);
     throw e;
+  }
+}
+
+/**
+ * Analyze a live webcam frame for security threats using Gemini Vision.
+ */
+export async function analyzeSecurityFrame(base64Image, mimeType) {
+  try {
+    const model = genAI.getGenerativeModel({
+      model: GEMINI_VISION_MODEL,
+      generationConfig: { responseMimeType: "application/json" },
+    });
+
+    const userPrompt = `Analyze this live webcam frame from a hospitality venue (e.g., hotel lobby, hallway, or security desk).
+You must look for ALL problems a hospitality venue can face, especially security threats or medical emergencies.
+Identify:
+1. What the person is doing.
+2. What is visible in the background.
+3. If someone is on the floor or unconscious, flag it immediately as a potential medical emergency. If they are acting strangely, flag as suspicious activity.
+4. The presence of any weapons (guns, knives) or unattended luggage.
+5. Score the scene using the Unified Priority Engine factors (V, S, I, H, L, P) as defined in the system instructions.
+
+Return exactly this JSON:
+{
+  "activity": "<description of what the person is doing>",
+  "background": "<description of the background environment>",
+  "suspiciousActivity": "<any suspicious activity, medical emergency, unattended items, or 'None'>",
+  "weaponsDetected": ["<list of weapons>", ...],
+  "threatLevel": <int 0-10, overall assessment>,
+  "liveFactors": {
+    "V": <0-10>,
+    "S": <0-10>,
+    "I": <0-10>,
+    "H": <0-10>,
+    "L": <0-10>,
+    "P": <0-10>
+  },
+  "fullReport": "<A comprehensive summary paragraph evaluating the security and medical risk of the scene>"
+}`;
+
+    const result = await model.generateContent([
+      { text: SYSTEM_PROMPT },
+      { text: userPrompt },
+      {
+        inlineData: {
+          data: base64Image,
+          mimeType: mimeType
+        }
+      }
+    ]);
+
+    const text = result.response.text();
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("[Security AI] Frame analysis failed:", error.message);
+    throw error;
   }
 }
