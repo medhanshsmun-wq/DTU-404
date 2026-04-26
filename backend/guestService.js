@@ -9,6 +9,8 @@
 //   - Incident reporting (feeds into main pipeline)
 // ============================================================
 
+import store from "./store.js";
+
 // ── Mock Guest Database ───────────────────────────────────
 
 const GUESTS = [
@@ -48,9 +50,23 @@ export const ZONES = [
 
 // ── Session State ─────────────────────────────────────────
 
-const activeSessions = new Map(); // sessionToken → { guest, currentZone, loginAt }
-const movementHistory = new Map(); // guestId → [ { zone, timestamp } ]
-const serviceRequests = new Map(); // guestId → [ { id, type, ... } ]
+let activeSessions = new Map(); // sessionToken → { guest, currentZone, loginAt }
+let movementHistory = new Map(); // guestId → [ { zone, timestamp } ]
+let serviceRequests = new Map(); // guestId → [ { id, type, ... } ]
+
+export function initGuestData() {
+  activeSessions = store.arrayToMap(store.loadData('activeSessions', []));
+  movementHistory = store.arrayToMap(store.loadData('movementHistory', []));
+  serviceRequests = store.arrayToMap(store.loadData('serviceRequests', []));
+}
+
+function saveGuestData() {
+  store.saveData('activeSessions', store.mapToArray(activeSessions));
+  store.saveData('movementHistory', store.mapToArray(movementHistory));
+  store.saveData('serviceRequests', store.mapToArray(serviceRequests));
+}
+
+setInterval(saveGuestData, 5000);
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -199,21 +215,68 @@ export function getAllZones() {
 // ============================================================
 
 const SERVICE_TYPES = {
-  room_service: { name: "Room Service", icon: "utensils", estimatedMin: 25 },
-  housekeeping: { name: "Housekeeping", icon: "sparkles", estimatedMin: 15 },
-  concierge: { name: "Concierge", icon: "bell-ring", estimatedMin: 5 },
-  maintenance: { name: "Maintenance", icon: "wrench", estimatedMin: 20 },
-  laundry: { name: "Laundry", icon: "shirt", estimatedMin: 120 },
-  towels: { name: "Extra Towels", icon: "bath", estimatedMin: 10 },
-  minibar: { name: "Minibar Refill", icon: "cup-soda", estimatedMin: 15 },
-  wake_up: { name: "Wake-up Call", icon: "alarm-clock", estimatedMin: 0 },
-  transport: { name: "Transportation", icon: "car", estimatedMin: 20 },
+  room_service: { 
+    name: "Room Service", 
+    icon: "utensils", 
+    estimatedMin: 25,
+    items: [
+      { id: 'rs1', name: 'Taj Signature Burger', price: 25 },
+      { id: 'rs2', name: 'Margherita Pizza', price: 18 },
+      { id: 'rs3', name: 'Club Sandwich', price: 15 },
+      { id: 'rs4', name: 'Masala Chai', price: 5 },
+      { id: 'rs5', name: 'Fresh Orange Juice', price: 8 },
+    ]
+  },
+  housekeeping: { 
+    name: "Housekeeping", 
+    icon: "sparkles", 
+    estimatedMin: 15,
+    items: [
+      { id: 'hk1', name: 'Standard Cleaning', price: 0 },
+      { id: 'hk2', name: 'Deep Cleaning', price: 50 },
+      { id: 'hk3', name: 'Evening Turndown', price: 0 },
+    ]
+  },
+  concierge: { name: "Concierge", icon: "bell-ring", estimatedMin: 5, items: [] },
+  maintenance: { name: "Maintenance", icon: "wrench", estimatedMin: 20, items: [] },
+  laundry: { 
+    name: "Laundry", 
+    icon: "shirt", 
+    estimatedMin: 120,
+    items: [
+      { id: 'ld1', name: 'Standard Wash & Fold', price: 30 },
+      { id: 'ld2', name: 'Dry Cleaning (Suit)', price: 45 },
+      { id: 'ld3', name: 'Express Ironing', price: 15 },
+    ]
+  },
+  towels: { name: "Extra Towels", icon: "bath", estimatedMin: 10, items: [] },
+  minibar: { 
+    name: "Minibar Refill", 
+    icon: "cup-soda", 
+    estimatedMin: 15,
+    items: [
+      { id: 'mb1', name: 'Full Refill', price: 100 },
+      { id: 'mb2', name: 'Snacks Only', price: 40 },
+      { id: 'mb3', name: 'Beverages Only', price: 60 },
+    ]
+  },
+  wake_up: { name: "Wake-up Call", icon: "alarm-clock", estimatedMin: 0, items: [] },
+  transport: { 
+    name: "Transportation", 
+    icon: "car", 
+    estimatedMin: 20,
+    items: [
+      { id: 'tr1', name: 'Airport Transfer (Sedan)', price: 80 },
+      { id: 'tr2', name: 'Airport Transfer (SUV)', price: 120 },
+      { id: 'tr3', name: 'City Tour (Half Day)', price: 150 },
+    ]
+  },
 };
 
 /**
  * Submit a service request.
  */
-export function createServiceRequest(token, type, details = "") {
+export function createServiceRequest(token, type, details = "", items = []) {
   const session = activeSessions.get(token);
   if (!session) return null;
 
@@ -229,6 +292,7 @@ export function createServiceRequest(token, type, details = "") {
     typeName: serviceType.name,
     typeIcon: serviceType.icon,
     details,
+    items,
     status: "pending",
     estimatedMin: serviceType.estimatedMin,
     zone: session.currentZone,
@@ -253,6 +317,32 @@ export function getServiceRequests(token) {
   if (!session) return [];
 
   return (serviceRequests.get(session.guest.id) || []).slice(-20).reverse();
+}
+
+/**
+ * Get all service requests (Admin).
+ */
+export function getAllServiceRequestsAdmin() {
+  const allReqs = [];
+  for (const [guestId, reqs] of serviceRequests.entries()) {
+    allReqs.push(...reqs);
+  }
+  return allReqs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+/**
+ * Update service request status (Admin).
+ */
+export function updateServiceRequestStatusAdmin(guestId, reqId, status) {
+  const requests = serviceRequests.get(guestId);
+  if (!requests) return false;
+  
+  const req = requests.find(r => r.id === reqId);
+  if (!req) return false;
+  
+  req.status = status;
+  req.updatedAt = new Date().toISOString();
+  return true;
 }
 
 /**

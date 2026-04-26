@@ -9,8 +9,8 @@ import {
   Flame, Shield, Cpu, Droplet, Eye, BarChart3
 } from 'lucide-react';
 import IncidentCard from './IncidentCard';
-import SimulatorModal from './SimulatorModal';
 import DispatchMonitor from './DispatchMonitor';
+import CCTVMonitor from './CCTVMonitor';
 import { API_BASE_URL } from '../config';
 
 const SOCKET_SERVER_URL = API_BASE_URL;
@@ -18,7 +18,6 @@ const SOCKET_SERVER_URL = API_BASE_URL;
 function Dashboard({ onIncidentCountChange }) {
   const [incidents, setIncidents] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
-  const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [weather, setWeather] = useState(null);
   const [seismic, setSeismic] = useState(null);
   const [autoFeedEnabled, setAutoFeedEnabled] = useState(false);
@@ -223,38 +222,67 @@ function Dashboard({ onIncidentCountChange }) {
           />
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          {/* Left Panel */}
-          <div className="xl:col-span-4 2xl:col-span-3 space-y-6">
-            {/* AI Assistant Panel */}
-            <DispatchMonitor />
-
-            {/* Engine Info Card */}
-            <div className="card p-4">
-              <h3 className="text-xs font-semibold text-[#737373] uppercase tracking-wider mb-3">
-                Priority Engine
-              </h3>
-              <div className="space-y-2.5">
-                <EngineRow label="Formula" value="0.20 BCP + 0.80 LIS + CM" />
-                <EngineRow label="LIS" value="0.30V + 0.20S + 0.20I + 0.15H + 0.10L + 0.05P" />
-                <EngineRow label="Domains" value="Medical, Hazard, Infrastructure" />
-                <EngineRow label="Overrides" value="18 deterministic rules" />
-              </div>
+        {/* Command Center 2x2 Grid */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          
+          {/* Quadrant 1: Active Threats */}
+          <div className="space-y-4">
+            <h2 className="text-base font-semibold text-white flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+              Active Threats
+            </h2>
+            <div className="card p-4 h-[400px] overflow-y-auto space-y-3 custom-scrollbar">
+              <AnimatePresence mode="popLayout">
+                {incidents.filter(i => i.status === 'Active' || i.status === 'En Route').length === 0 ? (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="h-full flex flex-col items-center justify-center text-center opacity-50"
+                  >
+                    <Shield className="w-8 h-8 mb-3 text-[#525252]" />
+                    <h3 className="text-sm font-medium text-[#737373]">No Active Threats</h3>
+                  </motion.div>
+                ) : (
+                  incidents.filter(i => i.status === 'Active' || i.status === 'En Route').map((incident, index) => (
+                    <motion.div
+                      key={incident.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      layout
+                    >
+                      <IncidentCard incident={incident} onResolve={handleResolve} />
+                    </motion.div>
+                  ))
+                )}
+              </AnimatePresence>
             </div>
-
-            {/* Risk Baseline */}
-            <BaselineRiskPanel />
           </div>
 
-          {/* Right Panel - Incident Feed */}
-          <div className="xl:col-span-8 2xl:col-span-9">
+          {/* Quadrant 2: CCTV Overview */}
+          <div className="space-y-4">
+            <CCTVMonitor />
+          </div>
+
+          {/* Quadrant 3: Dispatch Operations */}
+          <div className="space-y-4">
+            <h2 className="text-base font-semibold text-white flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-400" />
+              Dispatch Operations
+            </h2>
+            <div className="h-[400px] overflow-y-auto card p-0 border-none bg-transparent custom-scrollbar">
+              <DispatchMonitor />
+            </div>
+          </div>
+
+          {/* Quadrant 4: Compact Recent Incidents */}
+          <div className="space-y-4 h-[440px] flex flex-col">
             {/* Feed Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <h2 className="text-base font-semibold text-white flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-blue-400" />
-                  Incident Feed
+                  <Activity className="w-4 h-4 text-purple-400" />
+                  Recent Alerts
                 </h2>
                 {autoFeedEnabled && (
                   <span className="live-indicator text-[10px] text-green-400 bg-green-500/10 px-2 py-1 rounded-full border border-green-500/20">
@@ -262,60 +290,25 @@ function Dashboard({ onIncidentCountChange }) {
                   </span>
                 )}
               </div>
-
-              <div className="flex items-center gap-2">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#525252]" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search incidents..."
-                    className="input pl-9 pr-3 py-2 w-48"
-                  />
-                </div>
-
-                {/* Filter Tabs */}
-                <div className="flex items-center bg-[#111111] rounded-lg border border-[#1f1f1f] p-0.5">
-                  {[
-                    { key: 'all', label: 'All' },
-                    { key: 'critical', label: 'Critical' },
-                    { key: 'high', label: 'High+' },
-                  ].map(tab => (
-                    <button
-                      key={tab.key}
-                      onClick={() => setSelectedView(tab.key)}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                        selectedView === tab.key
-                          ? 'bg-[#262626] text-white'
-                          : 'text-[#737373] hover:text-white'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
 
             {/* Incident List */}
-            <div className="space-y-3">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
               <AnimatePresence mode="popLayout">
-                {filteredIncidents.length === 0 ? (
+                {incidents.slice(0, 5).length === 0 ? (
                   <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="card p-16 flex flex-col items-center justify-center text-center border-dashed"
                   >
-                    <Shield className="w-12 h-12 mb-4 text-[#262626]" />
-                    <h3 className="text-sm font-medium text-[#a1a1a1]">All Clear</h3>
+                    <Search className="w-12 h-12 mb-4 text-[#262626]" />
+                    <h3 className="text-sm font-medium text-[#a1a1a1]">No Matches</h3>
                     <p className="max-w-xs mt-2 text-xs text-[#525252] leading-relaxed">
-                      No active incidents detected. The system is monitoring all sensors and feeds.
+                      No incidents match your current search and filter settings.
                     </p>
                   </motion.div>
                 ) : (
-                  filteredIncidents.map((incident, index) => (
+                  incidents.slice(0, 5).map((incident, index) => (
                     <motion.div
                       key={incident.id}
                       initial={{ opacity: 0, y: 20 }}
@@ -334,7 +327,6 @@ function Dashboard({ onIncidentCountChange }) {
         </div>
       </div>
 
-      {isSimulatorOpen && <SimulatorModal onClose={() => setIsSimulatorOpen(false)} />}
     </div>
   );
 }

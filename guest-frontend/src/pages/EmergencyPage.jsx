@@ -69,6 +69,20 @@ function EmergencyPage() {
             <p className="text-xs text-[#888] mb-2">Your location has been shared:</p>
             <p className="text-sm text-[#ccc] font-medium">Room {guest?.room} — {guest?.firstName} {guest?.lastName}</p>
           </div>
+          
+          {selectedType && ['fire', 'earthquake', 'flood', 'medical', 'security'].includes(selectedType) && (
+            <div className="mb-6 overflow-hidden rounded-xl border border-[#222]">
+              <div className="bg-[#1a1a1a] p-2 text-center text-[10px] text-[#888] uppercase tracking-wider font-semibold border-b border-[#222]">
+                Emergency Protocol Schematic
+              </div>
+              <img 
+                src={`/schematics/${selectedType}.png`} 
+                alt={`${selectedType} schematic`} 
+                className="w-full h-auto object-cover max-h-64"
+              />
+            </div>
+          )}
+          
           <button onClick={() => navigate('/')} className="btn-secondary">
             Return Home
           </button>

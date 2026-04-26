@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -24,6 +24,14 @@ function ReportPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [isResolved, setIsResolved] = useState(false);
+
+  const [recentReports, setRecentReports] = useState([]);
+
+  useEffect(() => {
+    api('/api/guest/reports').then(setRecentReports).catch(() => {});
+  }, [api, result, isResolved]);
+
+  // Handle report UI rendering ...
 
   const handleResolve = async () => {
     if (!result || !result.incidentId || isResolved) return;
@@ -168,6 +176,34 @@ function ReportPage() {
           )}
         </button>
       </form>
+
+      {/* Recent Reports */}
+      {recentReports.length > 0 && (
+        <div className="mt-8 pt-6 border-t border-[#222]">
+          <h2 className="section-title">Your Recent Reports</h2>
+          <div className="space-y-3">
+            {recentReports.map(report => (
+              <div key={report.id} className="card p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`badge text-[9px] ${
+                      report.tier === 'Critical' ? 'badge-critical' :
+                      report.tier === 'High' ? 'badge-high' :
+                      'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                    }`}>{report.tier}</span>
+                    <span className="text-[10px] text-[#ccc] font-medium">{report.category}</span>
+                  </div>
+                  <span className={`text-[9px] font-semibold px-2 py-0.5 rounded ${
+                    report.status === 'Resolved' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'
+                  }`}>{report.status}</span>
+                </div>
+                <p className="text-xs text-[#888]">{report.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

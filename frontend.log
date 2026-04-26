@@ -1,0 +1,19 @@
+
+> frontend@0.0.0 dev
+> vite
+
+2:11:55 AM [vite] (client) Re-optimizing dependencies because vite config has changed
+
+  VITE v8.0.3  ready in 206 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+2:13:14 AM [vite] (client) [Unhandled error] ReferenceError: App is not defined
+ > src/views/LiveViews.jsx:1188:15
+    1186 |  }
+    1187 |  
+    1188 |  export default App;
+         |                 ^
+    1189 |  
+    1190 |  
+

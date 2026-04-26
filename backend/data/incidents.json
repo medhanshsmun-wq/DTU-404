@@ -1,0 +1,414 @@
+[
+  {
+    "id": "moeszyi78j2wbz",
+    "timestamp": "2026-04-25T20:40:19.567Z",
+    "lastUpdated": "2026-04-25T20:54:22.985Z",
+    "status": "Resolved",
+    "source": "guest_emergency",
+    "_dedupKey": "guest_emergency::main lobby::medical",
+    "hazardType": "Medical",
+    "isCompound": false,
+    "compoundTypes": [],
+    "rawDescription": "[EMERGENCY PANIC BUTTON] Guest Demo Guest, Room 100, at Main Lobby. Type: unspecified. Guest has activated the emergency button — immediate response required. This is an unverified emergency report from a hotel guest.",
+    "location": "Main Lobby",
+    "score": 6.24,
+    "finalPriority": 6.24,
+    "tier": "High",
+    "priorityBand": "High",
+    "confidence": 0.71,
+    "autonomyLevel": "A2",
+    "bcp": 5,
+    "lis": 6.55,
+    "factors": {
+      "V": 7,
+      "S": 5,
+      "I": 9,
+      "H": 6,
+      "L": 4,
+      "P": 7
+    },
+    "factorLabels": {
+      "V": "Vital / Life Threat",
+      "S": "Severity / Spread",
+      "I": "Immediate Intervention Need",
+      "H": "Historical / Hazard Context",
+      "L": "Location / Access Risk",
+      "P": "Propagation / Population Impact"
+    },
+    "domain": "medical",
+    "overrideFloor": 0,
+    "overrideApplied": false,
+    "overrideReason": null,
+    "compoundModifier": 0,
+    "rerankAfterSec": 10,
+    "baselineRisk": 5,
+    "liveScore": 6.55,
+    "rawPriority": 6.24,
+    "liveFactorBreakdown": {
+      "V": {
+        "value": 7,
+        "weight": 0.3,
+        "label": "Vital / Life Threat"
+      },
+      "S": {
+        "value": 5,
+        "weight": 0.2,
+        "label": "Severity / Spread"
+      },
+      "I": {
+        "value": 9,
+        "weight": 0.2,
+        "label": "Immediate Intervention Need"
+      },
+      "H": {
+        "value": 6,
+        "weight": 0.15,
+        "label": "Historical / Hazard Context"
+      },
+      "L": {
+        "value": 4,
+        "weight": 0.1,
+        "label": "Location / Access Risk"
+      },
+      "P": {
+        "value": 7,
+        "weight": 0.05,
+        "label": "Propagation / Population Impact"
+      }
+    },
+    "aiConfidence": 0.85,
+    "explanation": [
+      "The unspecified nature of the emergency and the activation of a panic button by a guest in the main lobby suggest a potential for immediate life threat (V:7), though confirmation is pending.",
+      "The initial severity is unknown but could escalate rapidly, hence a moderate score for Severity/Spread (S:5).",
+      "Immediate intervention is critical due to the panic button activation and the potential for a medical emergency or security threat (I:9).",
+      "The hotel's history of the 2008 attack heightens the concern for any unverified report, even if it turns out to be medical (H:6).",
+      "The main lobby is generally accessible, but the unknown nature of the incident and potential crowd gathering could pose some access challenges (L:4).",
+      "An unspecified incident in a high-traffic area like the main lobby could quickly involve and panic other guests, leading to a significant population impact (P:7)."
+    ],
+    "recommendedActions": [
+      "Dispatch immediate security and medical response team to Room 100 in the Main Lobby.",
+      "Request guest to verbally confirm the nature of the emergency via intercom or phone if possible.",
+      "Secure the immediate vicinity of Room 100 to prevent unauthorized access or escalation.",
+      "Prepare for potential medical emergencies (e.g., cardiac arrest, bleeding) and security threats.",
+      "Assess for any signs of panic or crowd formation in the lobby and manage accordingly.",
+      "Document the response time and all actions taken."
+    ],
+    "sensorSignals": {
+      "panicButtonActivated": "true",
+      "guestRoom": "100",
+      "incidentLocation": "Main Lobby",
+      "emergencyType": "unspecified",
+      "reportSource": "guest"
+    },
+    "_lastRerankedAt": 1777150459083
+  },
+  {
+    "id": "moetifujcka5fe",
+    "timestamp": "2026-04-25T20:54:41.851Z",
+    "lastUpdated": "2026-04-25T20:55:06.704Z",
+    "status": "Resolved",
+    "source": "guest_report",
+    "_dedupKey": "guest_report::main lobby::hazard",
+    "hazardType": "Hazard",
+    "isCompound": true,
+    "compoundTypes": [
+      "Hazard",
+      "Infrastructure/Crowd"
+    ],
+    "rawDescription": "[Guest Report — Room 100, Demo Guest] (security) armed gunmen",
+    "location": "Main Lobby",
+    "score": 9.44,
+    "finalPriority": 9.44,
+    "tier": "Critical",
+    "priorityBand": "Critical",
+    "confidence": 0.83,
+    "autonomyLevel": "A3",
+    "bcp": 8,
+    "lis": 9.8,
+    "factors": {
+      "V": 10,
+      "S": 10,
+      "I": 10,
+      "H": 10,
+      "L": 8,
+      "P": 10
+    },
+    "factorLabels": {
+      "V": "Vital / Life Threat",
+      "S": "Severity / Spread",
+      "I": "Immediate Intervention Need",
+      "H": "Historical / Hazard Context",
+      "L": "Location / Access Risk",
+      "P": "Propagation / Population Impact"
+    },
+    "domain": "hazard",
+    "overrideFloor": 0,
+    "overrideApplied": false,
+    "overrideReason": null,
+    "compoundModifier": 0,
+    "rerankAfterSec": 10,
+    "baselineRisk": 8,
+    "liveScore": 9.8,
+    "rawPriority": 9.44,
+    "liveFactorBreakdown": {
+      "V": {
+        "value": 10,
+        "weight": 0.3,
+        "label": "Vital / Life Threat"
+      },
+      "S": {
+        "value": 10,
+        "weight": 0.2,
+        "label": "Severity / Spread"
+      },
+      "I": {
+        "value": 10,
+        "weight": 0.2,
+        "label": "Immediate Intervention Need"
+      },
+      "H": {
+        "value": 10,
+        "weight": 0.15,
+        "label": "Historical / Hazard Context"
+      },
+      "L": {
+        "value": 8,
+        "weight": 0.1,
+        "label": "Location / Access Risk"
+      },
+      "P": {
+        "value": 10,
+        "weight": 0.05,
+        "label": "Propagation / Population Impact"
+      }
+    },
+    "aiConfidence": 0.95,
+    "explanation": [
+      "The report of armed gunmen is a direct and immediate threat to life, warranting the highest Vital score.",
+      "The nature of armed gunmen implies a high potential for rapid escalation, spread of violence, and severe harm, leading to maximum Severity and Propagation scores.",
+      "The urgency for intervention is absolute, given the direct threat to life and potential for mass casualties.",
+      "The historical context of the 2008 attack at this specific location drastically increases the perceived danger and potential impact of such an incident.",
+      "Access may be compromised by the attackers, and containment/rescue efforts could be extremely challenging, justifying a high Location/Access Risk score."
+    ],
+    "recommendedActions": [
+      "Initiate immediate lockdown procedures for the entire hotel.",
+      "Activate all security personnel and alert local law enforcement (Mumbai Police) with precise location details.",
+      "Guide guests and staff to secure locations, away from windows and doors, emphasizing silence.",
+      "Attempt to ascertain the number of gunmen and their exact location if possible without compromising safety.",
+      "Prepare for potential medical emergencies and establish a secure triage area if feasible.",
+      "Secure communication lines and maintain contact with emergency services."
+    ],
+    "sensorSignals": {
+      "gunmen_present": "true",
+      "incident_location": "Room 100",
+      "reported_by": "Guest (Demo Guest)",
+      "security_alert": "activated"
+    },
+    "_lastRerankedAt": 1777150504089
+  },
+  {
+    "id": "moetos4oo60ury",
+    "timestamp": "2026-04-25T20:59:37.704Z",
+    "lastUpdated": "2026-04-25T21:00:25.878Z",
+    "status": "Resolved",
+    "source": "guest_report",
+    "_dedupKey": "guest_report::main lobby::infrastructure/crowd",
+    "hazardType": "Infrastructure/Crowd",
+    "isCompound": false,
+    "compoundTypes": [],
+    "rawDescription": "[Guest Report — Room 100, Demo Guest] (infrastructure) lift stopped working, stuck between levels 2 and 3",
+    "location": "Main Lobby",
+    "score": 5.04,
+    "finalPriority": 5.04,
+    "tier": "Medium",
+    "priorityBand": "Medium",
+    "confidence": 0.72,
+    "autonomyLevel": "A1",
+    "bcp": 5,
+    "lis": 3.8,
+    "factors": {
+      "V": 3,
+      "S": 2,
+      "I": 6,
+      "H": 4,
+      "L": 5,
+      "P": 4
+    },
+    "factorLabels": {
+      "V": "Vital / Life Threat",
+      "S": "Severity / Spread",
+      "I": "Immediate Intervention Need",
+      "H": "Historical / Hazard Context",
+      "L": "Location / Access Risk",
+      "P": "Propagation / Population Impact"
+    },
+    "domain": "infrastructure_crowd",
+    "overrideFloor": 0,
+    "overrideApplied": false,
+    "overrideReason": null,
+    "compoundModifier": 1,
+    "rerankAfterSec": 10,
+    "baselineRisk": 5,
+    "liveScore": 3.8,
+    "rawPriority": 5.04,
+    "liveFactorBreakdown": {
+      "V": {
+        "value": 3,
+        "weight": 0.3,
+        "label": "Vital / Life Threat"
+      },
+      "S": {
+        "value": 2,
+        "weight": 0.2,
+        "label": "Severity / Spread"
+      },
+      "I": {
+        "value": 6,
+        "weight": 0.2,
+        "label": "Immediate Intervention Need"
+      },
+      "H": {
+        "value": 4,
+        "weight": 0.15,
+        "label": "Historical / Hazard Context"
+      },
+      "L": {
+        "value": 5,
+        "weight": 0.1,
+        "label": "Location / Access Risk"
+      },
+      "P": {
+        "value": 4,
+        "weight": 0.05,
+        "label": "Propagation / Population Impact"
+      }
+    },
+    "aiConfidence": 0.9,
+    "explanation": [
+      "The primary threat is entrapment, which is life-threatening if immediate rescue fails or if the trapped guest has a medical condition.",
+      "The severity is currently localized to one elevator but could worsen if other elevators fail or if the trapped guest's condition deteriorates.",
+      "Immediate intervention is needed to rescue the guest and prevent panic.",
+      "The hotel's historical context (2008 attack) and location near the sea mean that any infrastructure failure can be perceived with higher threat levels, though this specific incident is not directly related.",
+      "Access to the elevator shaft for rescue operations can be complex and requires specialized teams, potentially delaying intervention.",
+      "While localized, the incident could cause minor panic or inconvenience to other guests, especially if it escalates or affects multiple elevators."
+    ],
+    "recommendedActions": [
+      "Dispatch engineering and security to the specific elevator shaft immediately.",
+      "Confirm the number of occupants in the stuck elevator and assess their immediate condition.",
+      "Initiate rescue procedures as per hotel's elevator emergency protocol.",
+      "Monitor other elevators for any signs of malfunction.",
+      "Prepare for potential guest evacuation from affected areas if deemed necessary.",
+      "Communicate status updates to the guest and relevant hotel management."
+    ],
+    "sensorSignals": {
+      "elevator_status": "malfunction",
+      "elevator_location": "between levels 2 and 3",
+      "guest_report_source": "Room 100, Demo Guest"
+    },
+    "_lastRerankedAt": 1777150819147
+  },
+  {
+    "id": "mofdu3jf4qww12",
+    "timestamp": "2026-04-26T06:23:38.091Z",
+    "lastUpdated": "2026-04-26T06:24:00.831Z",
+    "status": "Resolved",
+    "source": "manual",
+    "_dedupKey": "manual::facility - general::threat",
+    "hazardType": "Threat",
+    "isCompound": true,
+    "compoundTypes": [
+      "Threat",
+      "Crowd"
+    ],
+    "rawDescription": "Suspicious individual reported near main entrance. Security cameras show person with concealed object. Staff have been alerted. 50+ guests in immediate area.",
+    "location": "Facility - General",
+    "score": 8.26,
+    "finalPriority": 8.26,
+    "tier": "Critical",
+    "priorityBand": "Critical",
+    "confidence": 0.82,
+    "autonomyLevel": "A3",
+    "bcp": 7.5,
+    "lis": 8.45,
+    "factors": {
+      "V": 9,
+      "S": 7,
+      "I": 10,
+      "H": 9,
+      "L": 6,
+      "P": 8
+    },
+    "factorLabels": {
+      "V": "Vital / Life Threat",
+      "S": "Severity / Spread",
+      "I": "Immediate Intervention Need",
+      "H": "Historical / Hazard Context",
+      "L": "Location / Access Risk",
+      "P": "Propagation / Population Impact"
+    },
+    "domain": "infrastructure_crowd",
+    "overrideFloor": 0,
+    "overrideApplied": false,
+    "overrideReason": null,
+    "compoundModifier": 0,
+    "rerankAfterSec": 10,
+    "baselineRisk": 7.5,
+    "liveScore": 8.45,
+    "rawPriority": 8.26,
+    "liveFactorBreakdown": {
+      "V": {
+        "value": 9,
+        "weight": 0.3,
+        "label": "Vital / Life Threat"
+      },
+      "S": {
+        "value": 7,
+        "weight": 0.2,
+        "label": "Severity / Spread"
+      },
+      "I": {
+        "value": 10,
+        "weight": 0.2,
+        "label": "Immediate Intervention Need"
+      },
+      "H": {
+        "value": 9,
+        "weight": 0.15,
+        "label": "Historical / Hazard Context"
+      },
+      "L": {
+        "value": 6,
+        "weight": 0.1,
+        "label": "Location / Access Risk"
+      },
+      "P": {
+        "value": 8,
+        "weight": 0.05,
+        "label": "Propagation / Population Impact"
+      }
+    },
+    "aiConfidence": 0.9,
+    "explanation": [
+      "High potential for immediate loss of life due to 'concealed object' and 'suspicious individual'.",
+      "The threat is currently contained but could escalate rapidly, impacting a significant number of guests.",
+      "Urgency is paramount due to the unknown nature of the 'concealed object' and potential for immediate hostile action.",
+      "Historical context of the 2008 attack significantly elevates the perceived danger and requires a high-threat response.",
+      "The main entrance is a high-traffic area, making access difficult for responders and increasing potential panic among 50+ guests."
+    ],
+    "recommendedActions": [
+      "Immediately activate full security lockdown protocols for the main entrance and surrounding areas.",
+      "Dispatch specialized security and tactical teams to intercept and neutralize the suspicious individual.",
+      "Initiate discreet guest evacuation from the immediate vicinity of the main entrance.",
+      "Secure all other entrances and exits to prevent ingress and egress of potential threats or panicked individuals.",
+      "Disseminate a clear, calm, and concise communication to all staff regarding the situation and their roles.",
+      "Prepare medical and emergency response teams for potential casualties."
+    ],
+    "sensorSignals": {
+      "suspiciousIndividualReport": "true",
+      "concealedObjectOnCamera": "true",
+      "guestsInArea": ">50",
+      "alertedStaff": "true"
+    },
+    "_lastRerankedAt": 1777184639123
+  }
+]

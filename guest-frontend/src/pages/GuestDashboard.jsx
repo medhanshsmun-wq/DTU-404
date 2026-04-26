@@ -6,25 +6,34 @@ import {
   Cloud, Thermometer, ChevronRight, AlertTriangle, LogOut, Crown, Droplets
 } from 'lucide-react';
 import { useAuth } from '../App';
+import { API_BASE_URL } from '../config';
 
 function GuestDashboard() {
-  const { guest, alerts, api, logout } = useAuth();
+  const { guest, alerts, setAlerts, api, logout } = useAuth();
   const navigate = useNavigate();
   const [weather, setWeather] = useState(null);
   const [currentZone, setCurrentZone] = useState(null);
   const [zones, setZones] = useState([]);
   const [showZonePicker, setShowZonePicker] = useState(false);
 
+
+  const [recentReports, setRecentReports] = useState([]);
+
   useEffect(() => {
     api('/api/guest/profile').then((data) => {
+
       if (data.currentZoneName) setCurrentZone({ id: data.currentZone, name: data.currentZoneName });
     });
     api('/api/guest/zones').then(setZones);
-    fetch('http://localhost:3001/api/environment')
+    fetch(`${API_BASE_URL}/api/environment`)
       .then((r) => r.json())
       .then((d) => setWeather(d.weather))
       .catch(() => { });
+
+    api('/api/guest/reports').then(setRecentReports).catch(() => {});
+    api('/api/guest/alerts').then(setAlerts).catch(() => {});
   }, []);
+
 
   const handleZoneChange = async (zone) => {
     await api('/api/guest/location', {
@@ -64,17 +73,29 @@ function GuestDashboard() {
       {/* Active Alerts */}
       {alerts.length > 0 && (
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-4 space-y-2">
-          {alerts.slice(0, 2).map((alert) => (
-            <div key={alert.id} className="alert-card flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`badge text-[9px] ${alert.tier === 'Critical' ? 'badge-critical' : 'badge-high'}`}>
-                    {alert.tier}
-                  </span>
-                  <span className="text-[10px] text-red-400/70">{alert.type}</span>
+          {alerts.slice(0, 3).map((alert) => (
+            <div key={alert.id} className={`alert-card flex flex-col gap-2 ${alert.hotelResolved ? 'border-green-500/30 bg-green-500/5' : ''}`}>
+              <div className="flex items-start gap-3">
+                <AlertTriangle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${alert.hotelResolved ? 'text-green-400' : 'text-red-400'}`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`badge text-[9px] ${alert.tier === 'Critical' ? 'badge-critical' : 'badge-high'} ${alert.hotelResolved ? '!bg-green-500/20 !text-green-400 !border-green-500/30' : ''}`}>
+                      {alert.hotelResolved ? 'RESOLVED BY HOTEL' : alert.tier}
+                    </span>
+                    <span className={`text-[10px] ${alert.hotelResolved ? 'text-green-400/70' : 'text-red-400/70'}`}>{alert.type}</span>
+                  </div>
+                  <p className={`text-xs mt-1 line-clamp-2 ${alert.hotelResolved ? 'text-green-300/80' : 'text-red-300/80'}`}>
+                    {alert.hotelResolved ? (alert.resolutionMessage || "Hotel staff has handled this incident.") : alert.description}
+                  </p>
                 </div>
-                <p className="text-xs text-red-300/80 mt-1 line-clamp-2">{alert.description}</p>
+                {alert.hotelResolved && (
+                  <button 
+                    onClick={() => setAlerts(prev => prev.filter(a => a.id !== alert.id))}
+                    className="px-2 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded text-[10px] font-bold hover:bg-green-500/30 transition"
+                  >
+                    DISMISS
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -185,7 +206,35 @@ function GuestDashboard() {
           })}
         </div>
       </motion.div>
+
+      {/* Recent Reports Widget */}
+      {recentReports.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="mt-4"
+        >
+          <h2 className="section-title">Recent Reports</h2>
+          <div className="space-y-2">
+            {recentReports.slice(0, 2).map(report => (
+              <div key={report.id} className="card p-3 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-[#ccc] font-medium">{report.category || 'Incident'}</span>
+                  </div>
+                  <span className={`text-[8px] font-semibold px-1.5 py-0.5 rounded ${
+                    report.status === 'Resolved' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'
+                  }`}>{report.status}</span>
+                </div>
+                <p className="text-[11px] text-[#888] truncate">{report.description}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
     </div>
+
   );
 }
 

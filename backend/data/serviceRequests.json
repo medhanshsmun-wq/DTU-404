@@ -1,0 +1,22 @@
+[
+  [
+    "G999",
+    [
+      {
+        "id": "SRQ-moetnomqZT3J",
+        "guestId": "G999",
+        "room": "100",
+        "guestName": "Demo Guest",
+        "type": "room_service",
+        "typeName": "Room Service",
+        "typeIcon": "utensils",
+        "details": "",
+        "status": "pending",
+        "estimatedMin": 25,
+        "zone": "lobby",
+        "createdAt": "2026-04-25T20:58:46.514Z",
+        "updatedAt": "2026-04-25T20:58:46.514Z"
+      }
+    ]
+  ]
+]
