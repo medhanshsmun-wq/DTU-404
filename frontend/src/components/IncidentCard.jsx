@@ -67,6 +67,7 @@ const SOURCE_LABELS = {
   earthquake_feed: "Seismic",
   sensor_iot: "IoT",
   sensor_cctv: "CCTV",
+  autonomous_cctv: "Vision AI",
 };
 
 const AUTONOMY_LABELS = {
@@ -161,6 +162,21 @@ function IncidentCard({ incident, onResolve }) {
             </div>
 
             {/* Description */}
+            {/* Snapshot */}
+            {incident.snapshot && (
+              <div className="mt-2 mb-2 rounded-lg overflow-hidden border border-[#1f1f1f] bg-[#0a0a0a]">
+                <img 
+                  src={incident.snapshot} 
+                  alt="Incident Snapshot" 
+                  className="w-full h-auto object-cover max-h-48"
+                />
+                <div className="px-2 py-1 bg-black/60 backdrop-blur-md text-[9px] text-[#737373] flex items-center justify-between">
+                  <span>CCTV Evidence Frame</span>
+                  <span>{new Date(incident.timestamp).toLocaleTimeString()}</span>
+                </div>
+              </div>
+            )}
+
             <p className="mt-2 text-xs text-[#737373] line-clamp-2">
               {incident.rawDescription}
             </p>

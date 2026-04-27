@@ -18,8 +18,8 @@ HYSTERESIS_BUFFER_SIZE = FPS_TARGET * BUFFER_SECONDS
 
 def main():
     print("🎥 Starting Hybrid Medical-Emergency CCTV Pipeline...")
-    print("Loading YOLO model...")
-    model = YOLO('yolov8n.pt')
+    print("Loading YOLO-Pose model...")
+    model = YOLO('yolov8n-pose.pt')
 
     cap = cv2.VideoCapture(VIDEO_PATH)
     if not cap.isOpened():
@@ -82,14 +82,52 @@ def main():
         boxes = []
         
         for r in results:
-            for box in r.boxes:
+            if r.boxes is None:
+                continue
+                
+            for i, box in enumerate(r.boxes):
                 x1, y1, x2, y2 = box.xyxy[0]
                 w = x2 - x1
                 h = y2 - y1
-                boxes.append((x1, y1, x2, y2, w, h))
                 
-                # Heuristic: Width > Height usually means lying down
+                is_down = False
+                
+                # 1. Standard Bounding Box Heuristic (Safety fallback)
                 if w > h * 1.1:
+                    is_down = True
+                    
+                # 2. Pose-based Heuristic
+                if not is_down and r.keypoints is not None and len(r.keypoints.xy) > i:
+                    kpts = r.keypoints.xy[i]
+                    
+                    # Ultralytics Keypoint Indices: 
+                    # 0: Nose, 5: L-Shoulder, 6: R-Shoulder, 11: L-Hip, 12: R-Hip
+                    nose_y = kpts[0][1].item()
+                    ls, rs = kpts[5], kpts[6]
+                    lh, rh = kpts[11], kpts[12]
+                    
+                    # If shoulders and hips are confidently detected
+                    if ls[0] > 0 and rs[0] > 0 and lh[0] > 0 and rh[0] > 0:
+                        shoulder_x = (ls[0].item() + rs[0].item()) / 2
+                        shoulder_y = (ls[1].item() + rs[1].item()) / 2
+                        hip_x = (lh[0].item() + rh[0].item()) / 2
+                        hip_y = (lh[1].item() + rh[1].item()) / 2
+                        
+                        dx = abs(hip_x - shoulder_x)
+                        dy = abs(hip_y - shoulder_y)
+                        
+                        # Torso is horizontal (crawling or lying sideways)
+                        if dx > dy * 1.2:
+                            is_down = True
+                            
+                        # Head is physically below the hips (fallen forwards/backwards)
+                        # Note: In OpenCV, Y increases downwards, so nose_y > hip_y means nose is lower.
+                        if nose_y > 0 and nose_y > hip_y:
+                            is_down = True
+
+                boxes.append((x1, y1, x2, y2, w, h, is_down))
+                
+                if is_down:
                     person_down = True
         
         if person_down and len(boxes) > 1:
@@ -113,10 +151,10 @@ def main():
             last_alert_time = current_time
 
         # Draw bounds
-        for (x1, y1, x2, y2, w, h) in boxes:
-            color = (0, 0, 255) if (w > h * 1.1) else (0, 255, 0)
+        for (x1, y1, x2, y2, w, h, is_down) in boxes:
+            color = (0, 0, 255) if is_down else (0, 255, 0)
             cv2.rectangle(small_frame, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
-            if w > h * 1.1:
+            if is_down:
                 cv2.putText(small_frame, "DOWN", (int(x1), int(y1)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
         if is_critical:
