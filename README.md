@@ -557,7 +557,9 @@ Please ensure all PRs include updated tests and documentation.
 
 ## License
 
-This project is licensed under the **MIT License**. See [LICENSE](./LICENSE) for full terms.
+Licensing terms have not yet been determined. This repository is currently
+unlicensed. No permission is granted to use, copy, modify, or distribute
+this software without explicit written consent from the authors.
 
 ---
 
