@@ -105,13 +105,13 @@ function Sidebar({ activeView, onViewChange, incidentCount = 0, isConnected = fa
             </span>
           </div>
         )}
-        
+
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;
           const showBadge = item.id === 'incidents' && incidentCount > 0;
           const isHovered = hoveredItem === item.id;
-          
+
           return (
             <div key={item.id} className="relative">
               <button
@@ -141,7 +141,7 @@ function Sidebar({ activeView, onViewChange, incidentCount = 0, isConnected = fa
         })}
 
         <div className="my-3 h-px bg-[#1f1f1f] mx-2" />
-        
+
         {!isCollapsed && (
           <div className="mb-3 pl-2">
             <span className="text-[10px] font-semibold text-[#525252] uppercase tracking-wider">
@@ -149,12 +149,12 @@ function Sidebar({ activeView, onViewChange, incidentCount = 0, isConnected = fa
             </span>
           </div>
         )}
-        
+
         {SECONDARY_NAV.map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;
           const isHovered = hoveredItem === item.id;
-          
+
           return (
             <div key={item.id} className="relative">
               <button
