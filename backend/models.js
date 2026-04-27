@@ -14,14 +14,18 @@ const incidentSchema = new mongoose.Schema({
   confidence: Number,
   sensorSignals: mongoose.Schema.Types.Mixed,
   aiEnriched: Boolean,
-  explanation: String,
+  explanation: [String],
   recommendedActions: [String],
+  compoundTypes: [String],
+  isCompound: Boolean,
+  snapshot: String,
   bcpScore: Number,
   lisScore: Number,
   cmModifier: Number,
   finalPriority: Number,
   rerankAfterSec: Number,
-  _lastRerankedAt: Number
+  _lastRerankedAt: Number,
+  _dedupKey: String
 });
 
 const dispatchSchema = new mongoose.Schema({
