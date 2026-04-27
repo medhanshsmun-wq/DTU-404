@@ -13,7 +13,7 @@ import { Server } from "socket.io";
 import cors from "cors";
 import dotenv from "dotenv";
 
-import { analyzeIncident, generateSummaryFromCV, classifyFromCVSignals, analyzeMedicalCCTVImage, analyzeSecurityFrame } from "./ai.js";
+import { analyzeIncident, generateSummaryFromCV, classifyFromCVSignals, analyzeMedicalCCTVImage, analyzeSecurityFrame, analyzeCCTVImage } from "./ai.js";
 import {
   shouldCallLLMForCVEnrichment,
   recordSuccessfulCctvLlmEnrichment,
@@ -22,7 +22,7 @@ import { scoreIncident, detectDomain, computeCompoundModifier, computeConfidence
 import { startWeatherFeed, getCurrentWeather, checkWeatherThresholds } from "./feeds/weatherFeed.js";
 import { startEarthquakeFeed, getSeismicStatus, getLatestQuakes, checkEarthquakeThresholds } from "./feeds/earthquakeFeed.js";
 import { startSensorSimulator, stopSensorSimulator, isSensorSimulatorRunning, checkSensorEvents, getSensorState } from "./feeds/sensorSimulator.js";
-import { runCCTVAnalysis, setCCTVScenario } from "./feeds/cctvAnalyzer.js";
+import { runCCTVAnalysis } from "./feeds/cctvAnalyzer.js";
 import { llmCache, cvCache } from "./cache.js";
 import {
   dispatchIncident, acknowledgeDispatch, resolveDispatch,
@@ -235,263 +235,115 @@ app.post("/api/feeds/toggle", (req, res) => {
   res.json({ autoFeedEnabled });
 });
 
-// CCTV Scenario selection and trigger
-app.post("/api/cctv/scenario", (req, res) => {
-  const { scenario } = req.body;
-  setCCTVScenario(scenario);
-  res.json({ success: true, scenario });
-});
+// ── Autonomous CCTV Analysis ─────────
+// Global Rate Limiter for AI Vision (to stay within free tier limits)
+let globalVisionCallsThisMinute = 0;
+let lastQuotaReset = Date.now();
+const MAX_RPM = 12; // Stay safe below 15 RPM
 
-// ── Medical CCTV Gemini Verification ─────────
-app.post("/api/cctv/verify_medical", async (req, res) => {
-  const { frameBase64, mimeType } = req.body;
+const lastScanPerCamera = new Map();
+
+app.post("/api/cctv/analyze_frame", async (req, res) => {
+  const { frameBase64, mimeType, cameraLabel, cameraId } = req.body;
   if (!frameBase64) return res.status(400).json({ error: "Missing frameBase64" });
-  
-  try {
-    const result = await analyzeMedicalCCTVImage(frameBase64, mimeType || "image/jpeg");
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+
+  // 1. Quota Reset
+  if (Date.now() - lastQuotaReset > 60000) {
+    globalVisionCallsThisMinute = 0;
+    lastQuotaReset = Date.now();
   }
-});
 
-// ── Security Scanner API ───────────────
-app.post("/api/security/scan", async (req, res) => {
-  const { frameBase64, mimeType } = req.body;
-  if (!frameBase64) return res.status(400).json({ error: "Missing frameBase64" });
-  
-  try {
-    const result = await analyzeSecurityFrame(frameBase64, mimeType || "image/jpeg");
-    
-    // If threat is high, automatically create a real system incident
-    if (result.threatLevel >= 7) {
-      console.log(`[Security Scanner] 🚨 High threat detected (${result.threatLevel}/10). Creating system incident.`);
-      const incident = await processIncident(
-        `[SECURITY SCANNER ALERT] ${result.fullReport}`, 
-        "Security Console Live Feed",
-        "security_scanner"
-      );
-      
-      // Merge vision findings into incident
-      incident.sensorSignals = {
-        ...incident.sensorSignals,
-        threatLevel: result.threatLevel,
-        weapons: result.weaponsDetected
-      };
-      
-      activeIncidents.push(incident);
-      broadcastIncidents();
-      autoDispatch(incident);
-    }
-    
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  // 2. Global Rate Limit Check
+  if (globalVisionCallsThisMinute >= MAX_RPM) {
+    return res.status(429).json({ status: "skipped", reason: "global_quota_throttling" });
   }
-});
 
-// ── Hybrid CCTV Pipeline Webhook (Unified Engine) ─────────
-app.post("/api/cctv/stream_event", async (req, res) => {
-  const { source, location, description, sensorSignals, ml, forceLlmEnrich } = req.body;
-
-  if (!description) return res.status(400).json({ error: "Missing CV state description" });
-
-  const startTime = Date.now();
-
-  try {
-    // 1. DETERMINISTIC classification — V/S/I/H/L/P (~1ms)
-    // Optional `ml` from edge model: { confidence, topLabels?, version? } — used for LLM gating only here
-    const classification = classifyFromCVSignals(sensorSignals || {}, description);
-    if (ml && typeof ml.confidence === "number") {
-      classification.confidence = Math.max(classification.confidence, ml.confidence);
-    }
-
-    // 2. Build incident for unified scoring
-    const incidentForScoring = {
-      hazardType: classification.hazardType,
-      isCompound: classification.isCompound,
-      compoundTypes: classification.compoundTypes,
-      liveFactors: classification.liveFactors,
-      rawDescription: description,
-      sensorSignals: sensorSignals || {},
-      source: source || "sensor_cctv",
-      location: location || "Main Lobby Camera A",
-      confidence: classification.confidence,
-    };
-
-    // 3. Unified scoring (with compound modifier from active incidents)
-    const scoring = scoreIncident(incidentForScoring, activeIncidents);
-
-    // 4. Deduplication — update existing or create new
-    const key = dedupKey(source || "sensor_cctv", location || "Main Lobby Camera A", classification.hazardType);
-    const existing = findExistingIncident(key);
-
-    let incident;
-    if (existing) {
-      // UPDATE existing incident in-place
-      existing.lastUpdated = new Date().toISOString();
-      existing.rawDescription = description;
-      existing.sensorSignals = sensorSignals || {};
-      existing.hazardType = classification.hazardType;
-      existing.isCompound = classification.isCompound;
-      existing.compoundTypes = classification.compoundTypes || [];
-      existing.explanation = classification.explanation;
-      existing.recommendedActions = classification.recommendedActions;
-      existing.aiConfidence = classification.confidence;
-      existing.mlHints = ml || existing.mlHints;
-      Object.assign(existing, scoring);
-      incident = existing;
-      console.log(`[CCTV Fast] Updated ${existing.id} | ${scoring.tier} (${scoring.score}) | ${Date.now() - startTime}ms`);
-    } else {
-      // CREATE new incident
-      incident = {
-        id: genId(),
-        timestamp: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-        status: "Active",
-        source: source || "sensor_cctv",
-        _dedupKey: key,
-        hazardType: classification.hazardType,
-        isCompound: classification.isCompound,
-        compoundTypes: classification.compoundTypes || [],
-        rawDescription: description,
-        location: location || "Main Lobby Camera A",
-        ...scoring,
-        aiConfidence: classification.confidence,
-        explanation: classification.explanation,
-        recommendedActions: classification.recommendedActions,
-        sensorSignals: sensorSignals || {},
-        mlHints: ml || null,
-      };
-      activeIncidents.push(incident);
-      console.log(`[CCTV Fast] New ${incident.id} | ${scoring.tier} (${scoring.score}) | V=${scoring.factors.V} S=${scoring.factors.S} I=${scoring.factors.I} | ${Date.now() - startTime}ms`);
-      autoDispatch(incident);
-    }
-
-    // 5. Broadcast immediately (dashboard gets update in ~5ms)
-    broadcastIncidents();
-
-    const enrichDecision = shouldCallLLMForCVEnrichment({
-      dedupKey: key,
-      tier: scoring.tier,
-      isCompound: classification.isCompound,
-      classificationConfidence: classification.confidence,
-      mlConfidence: ml && typeof ml.confidence === "number" ? ml.confidence : undefined,
-      force: Boolean(forceLlmEnrich),
-    });
-
-    // 6. Respond to Python pipeline immediately
-    res.json({
-      id: incident.id,
-      tier: incident.tier,
-      priorityBand: incident.tier,
-      score: incident.score,
-      finalPriority: incident.finalPriority,
-      factors: incident.factors,
-      latencyMs: Date.now() - startTime,
-      enrichmentPending: enrichDecision.call,
-      enrichmentPolicy: enrichDecision.reason,
-    });
-
-    // 7. ASYNC LLM enrichment (gated — autonomous CV path avoids constant API use)
-    if (enrichDecision.call) {
-      const cvState = { location, description, sensorSignals };
-      const environmentContext = { weather: getCurrentWeather(), seismic: getSeismicStatus() };
-
-      generateSummaryFromCV(cvState, environmentContext)
-        .then((aiEnriched) => {
-          recordSuccessfulCctvLlmEnrichment(key);
-          // Merge LLM enrichment into the existing incident
-          incident.explanation = aiEnriched.explanation || incident.explanation;
-          incident.recommendedActions = aiEnriched.recommendedActions || incident.recommendedActions;
-          incident.aiConfidence = aiEnriched.confidence || incident.aiConfidence;
-          incident._enrichedAt = new Date().toISOString();
-
-          // Re-score with LLM factors if they're better
-          if (aiEnriched.liveFactors) {
-            const enrichedScoring = scoreIncident({
-              ...incidentForScoring,
-              liveFactors: aiEnriched.liveFactors,
-              confidence: aiEnriched.confidence,
-            }, activeIncidents);
-
-            // Take the higher score (deterministic vs LLM)
-            if (enrichedScoring.score > incident.score) {
-              Object.assign(incident, enrichedScoring);
-            }
-          }
-
-          // Re-broadcast with enriched data
-          broadcastIncidents();
-          console.log(`[CCTV Enrich] LLM merged for ${incident.id} (+${Date.now() - startTime}ms total)`);
-        })
-        .catch((err) => {
-          console.warn(`[CCTV Enrich] LLM enrichment failed (non-critical): ${err.message}`);
-        });
-    } else {
-      console.log(`[CCTV Enrich] Skipped LLM (${enrichDecision.reason}) for ${incident.id}`);
-    }
-
-  } catch (err) {
-    console.error("[CCTV Fast] Error:", err.message);
-    res.status(500).json({ error: "Failed to process CCTV event" });
+  // 3. Per-Camera Cooldown (Don't scan same cam too often)
+  const now = Date.now();
+  const lastScan = lastScanPerCamera.get(cameraId) || 0;
+  if (now - lastScan < 8000) { // Min 8s between scans for same cam
+    return res.json({ status: "skipped", reason: "camera_cooldown" });
   }
-});
 
-app.post("/api/cctv/trigger", async (req, res) => {
   try {
+    globalVisionCallsThisMinute++;
+    lastScanPerCamera.set(cameraId, now);
     const environmentContext = {
       weather: getCurrentWeather(),
       seismic: getSeismicStatus(),
     };
-    const cctvEv = await runCCTVAnalysis(environmentContext);
 
-    if (cctvEv && cctvEv.aiResult) {
-      const aiResult = cctvEv.aiResult;
+    console.log(`[CCTV Autonomous] Analyzing frame from ${cameraLabel} (${cameraId})...`);
+    const aiResult = await analyzeCCTVImage(frameBase64, mimeType || "image/jpeg", cameraLabel, environmentContext);
+    
+    if (aiResult) {
+      // Check for existing active incident at this location of this type to avoid duplicates
+      const key = dedupKey("autonomous_cctv", cameraLabel, aiResult.hazardType);
+      const existing = findExistingIncident(key);
+      
+      if (existing) {
+        console.log(`[CCTV Autonomous] Updating existing incident ${existing.id}`);
+        existing.lastUpdated = new Date().toISOString();
+        existing.explanation = aiResult.explanation;
+        existing.recommendedActions = aiResult.recommendedActions;
+        existing.snapshot = `data:image/jpeg;base64,${frameBase64}`;
+        broadcastIncidents();
+        return res.json({ status: "updated", incidentId: existing.id });
+      }
+
+      console.log(`[CCTV Autonomous] 🚨 NEW INCIDENT DETECTED: ${aiResult.hazardType}`);
       const incidentForScoring = {
         hazardType: aiResult.hazardType,
         isCompound: aiResult.isCompound,
         compoundTypes: aiResult.compoundTypes,
         liveFactors: aiResult.liveFactors,
-        rawDescription: cctvEv.description,
-        sensorSignals: cctvEv.sensorSignals || {},
-        source: cctvEv.source,
-        location: cctvEv.location,
+        rawDescription: aiResult.explanation.join(" "),
+        sensorSignals: aiResult.sensorSignals || {},
+        source: "autonomous_cctv",
+        location: cameraLabel,
         confidence: aiResult.confidence,
       };
 
       const scoring = scoreIncident(incidentForScoring, activeIncidents);
+
+      // THRESHOLD: Only create an incident if the score is high enough or confidence is high
+      // This prevents "jitter" or false positives from being reported as full incidents.
+      if (scoring.score < 2.0 && aiResult.confidence < 0.7) {
+        console.log(`[CCTV Autonomous] Ignoring low-confidence/low-threat detection (Score: ${scoring.score}, Conf: ${aiResult.confidence})`);
+        return res.json({ status: "safe", reason: "low_threat_threshold" });
+      }
 
       const incident = {
         id: genId(),
         timestamp: new Date().toISOString(),
         lastUpdated: new Date().toISOString(),
         status: "Active",
-        source: cctvEv.source,
+        source: "autonomous_cctv",
+        _dedupKey: key,
         hazardType: aiResult.hazardType,
         isCompound: aiResult.isCompound,
         compoundTypes: aiResult.compoundTypes || [],
-        rawDescription: cctvEv.description,
-        location: cctvEv.location,
+        rawDescription: `[AI Vision] ${aiResult.explanation.join(". ")}`,
+        location: cameraLabel,
+        snapshot: `data:image/jpeg;base64,${frameBase64}`,
         ...scoring,
-        aiConfidence: aiResult.confidence,
-        explanation: aiResult.explanation,
         recommendedActions: aiResult.recommendedActions,
-        sensorSignals: cctvEv.sensorSignals || {},
+        explanation: aiResult.explanation
       };
 
       activeIncidents.push(incident);
       broadcastIncidents();
       autoDispatch(incident);
-      res.json(incident);
+      res.json({ status: "created", incident });
     } else {
-      res.json({ message: "No incident detected by CCTV" });
+      res.json({ status: "safe" });
     }
   } catch (err) {
-    console.error("[CCTV] Trigger failed:", err.message);
+    console.error("[CCTV Autonomous] Analysis failed:", err.message);
     res.status(500).json({ error: "CCTV analysis failed" });
   }
 });
+
 
 // Update incident (PATCH)
 app.patch("/api/incidents/:id", (req, res) => {
@@ -972,6 +824,7 @@ app.get("/api/alerts", (req, res) => {
 app.get("/api/settings", (req, res) => {
   res.json({ autoFeedEnabled });
 });
+
 
 app.post("/api/settings", (req, res) => {
   const { autoFeed } = req.body;

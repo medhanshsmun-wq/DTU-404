@@ -463,13 +463,19 @@ export async function analyzeCCTVImage(base64Image, mimeType, location, environm
       contextStr += `CURRENT WEATHER: Temp: ${w.temperature}°C, Rain: ${w.rain} mm/hr\n`;
     }
 
-    const userPrompt = `Analyze this CCTV frame from Taj Hotel Mumbai.
+    const userPrompt = `Analyze this CCTV frame from a high-end hotel (Taj Hotel Mumbai).
+Your task is to identify GENUINE emergencies.
 
-${contextStr}
+Guidelines:
+1. If the scene shows normal hotel activity (guests walking, staff working, empty hallways, standard lobby scenes), you MUST return: {"safe": true}.
+2. Look for CLEAR signs of:
+   - Fire/Smoke: Visible flames or thick smoke.
+   - Medical: A person lying motionless on the floor or collapsed.
+   - Security: Violence, brandishing weapons, or obvious vandalism.
+   - Hazards: Significant flooding or structural collapse.
+3. DO NOT flag normal people as "suspicious" unless they are doing something objectively dangerous.
+4. If you detect a GENUINE emergency, analyze it using the Unified Priority Engine factors (V, S, I, H, L, P).
 
-Look carefully for any signs of an emergency (fire, smoke, flooding water, extreme crowd density, violence, structural damage).
-If you see a crisis, evaluate it using the JSON scheme. 
-If the frame is completely normal and safe, return exactly: {"safe": true}.
 Respond with the JSON assessment.`;
 
     const result = await model.generateContent([

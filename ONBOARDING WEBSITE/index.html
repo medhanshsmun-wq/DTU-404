@@ -4,246 +4,147 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Taj Hotel - Autonomous Crisis Response</title>
-    <meta
-      name="description"
-      content="Taj Hotel Autonomous Crisis Response is an AI agent response system that routes, validates, and returns reliable responses for hotel emergencies."
-    />
+    <meta name="description" content="Taj Hotel Autonomous Crisis Response Platform" />
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
               brand: {
-                400: "#7c8cff",
-                500: "#5f6fff",
-                600: "#4a58e8"
+                gold: "#d4af37",
+                border: "#222222",
+                borderHover: "#444444",
+                card: "#111111"
               }
-            },
-            boxShadow: {
-              soft: "0 16px 50px rgba(10, 13, 28, 0.35)"
             }
           }
         }
       };
     </script>
     <style>
-      html {
-        scroll-behavior: smooth;
+      body {
+        background-color: #0a0a0a;
+        color: #f5f0e8;
+      }
+      .bg-grid-pattern {
+        background-image: linear-gradient(to right, rgba(255,255,255,0.03) 1px, transparent 1px),
+                          linear-gradient(to bottom, rgba(255,255,255,0.03) 1px, transparent 1px);
+        background-size: 40px 40px;
       }
     </style>
   </head>
-  <body class="bg-slate-950 text-slate-100 antialiased">
-    <div class="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_15%_20%,rgba(95,111,255,0.34),transparent_32%),radial-gradient(circle_at_80%_5%,rgba(56,189,248,0.18),transparent_34%)]"></div>
-    <header class="sticky top-0 z-40 border-b border-white/10 bg-slate-950/80 backdrop-blur-md">
-      <nav class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
-        <a href="#" class="text-lg font-semibold tracking-tight">Taj Crisis Command</a>
-        <button id="menuBtn" class="rounded-lg border border-white/15 px-3 py-2 text-sm md:hidden" aria-label="Toggle navigation">
-          Menu
-        </button>
-        <ul class="hidden items-center gap-8 text-sm text-slate-300 md:flex">
-          <li><a href="#how" class="hover:text-white">How it works</a></li>
-          <li><a href="#simulator" class="hover:text-white">Simulator</a></li>
-          <li><a href="#metrics" class="hover:text-white">Metrics</a></li>
-          <li><a href="#contact" class="hover:text-white">Contact</a></li>
-        </ul>
-        <a href="#contact" class="hidden rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-600 md:inline-flex">
-          Request Access
-        </a>
-      </nav>
-      <div id="mobileMenu" class="hidden border-t border-white/10 px-6 py-4 md:hidden">
-        <ul class="space-y-3 text-sm text-slate-300">
-          <li><a href="#how" class="block rounded-md px-2 py-1 hover:bg-white/5">How it works</a></li>
-          <li><a href="#simulator" class="block rounded-md px-2 py-1 hover:bg-white/5">Simulator</a></li>
-          <li><a href="#metrics" class="block rounded-md px-2 py-1 hover:bg-white/5">Metrics</a></li>
-          <li><a href="#contact" class="block rounded-md px-2 py-1 hover:bg-white/5">Contact</a></li>
-        </ul>
-      </div>
-    </header>
-
-    <main>
-      <section class="mx-auto grid max-w-7xl gap-10 px-6 py-20 lg:grid-cols-2 lg:items-center lg:px-8">
-        <div>
-          <span class="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-slate-300">
-            Inspired by MCP component stack
-          </span>
-          <h1 class="mt-5 bg-gradient-to-b from-white to-slate-400 bg-clip-text text-4xl font-semibold tracking-tight text-transparent sm:text-5xl lg:text-6xl">
-            AI agent responses you can trust at production speed.
-          </h1>
-          <p class="mt-6 max-w-xl text-lg leading-relaxed text-slate-300">
-            The Command Center receives alerts, routes them to the right agent, applies policy checks, and returns safe responses with latency-aware failover.
-          </p>
-          <div class="mt-8 flex flex-wrap gap-3">
-            <span class="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200">Intent Routing</span>
-            <span class="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200">Guardrails</span>
-            <span class="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200">Streaming API</span>
-            <span class="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200">SLA Telemetry</span>
-          </div>
-          <div class="mt-8 flex flex-wrap items-center gap-4">
-            <a href="#simulator" class="rounded-xl bg-brand-500 px-6 py-3 text-sm font-semibold text-white hover:bg-brand-600">Try Demo</a>
-            <a href="#how" class="rounded-xl border border-white/15 px-6 py-3 text-sm font-semibold hover:bg-white/5">View Architecture</a>
-          </div>
-          <div class="mt-10 grid max-w-md grid-cols-3 gap-5 text-sm">
-            <div><p class="text-2xl font-semibold text-white">85ms</p><p class="text-slate-400">P95 latency</p></div>
-            <div><p class="text-2xl font-semibold text-white">99.97%</p><p class="text-slate-400">Reliability</p></div>
-            <div><p class="text-2xl font-semibold text-white">42M</p><p class="text-slate-400">Req/month</p></div>
-          </div>
+  <body class="selection:bg-brand-gold selection:text-black font-sans min-h-screen antialiased">
+    
+    <div class="relative overflow-hidden border-b border-brand-border py-20">
+      <div class="absolute inset-0 bg-grid-pattern"></div>
+      <div class="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-blue-500/10 blur-[100px] pointer-events-none"></div>
+      
+      <div class="relative z-10 max-w-5xl mx-auto px-6">
+        <div class="text-center mb-16">
+          <h1 class="text-5xl font-bold mb-6 text-white tracking-tight">Taj Hotel Platform</h1>
+          <p class="text-xl text-gray-400 max-w-2xl mx-auto">The intelligence driving our unified incident management and autonomous guest safety systems.</p>
         </div>
-        <div class="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-soft">
-          <div class="rounded-2xl border border-white/10 bg-slate-900 p-6">
-            <div class="mb-5 flex items-center justify-between">
-              <h2 class="font-medium text-white">Live response pipeline</h2>
-              <span class="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300">Healthy</span>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-20">
+          <!-- Capabilities -->
+          <div class="group relative bg-brand-card border border-brand-border rounded-2xl p-6 hover:border-brand-borderHover transition-all duration-300">
+            <div class="w-12 h-12 bg-black border border-brand-border rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+              <i data-lucide="eye" class="w-6 h-6 text-blue-400"></i>
             </div>
-            <ol class="space-y-3 text-sm text-slate-200">
-              <li class="rounded-lg border border-white/10 bg-white/5 p-3">1. Ingress API receives request</li>
-              <li class="rounded-lg border border-white/10 bg-white/5 p-3">2. Intent router chooses best agent</li>
-              <li class="rounded-lg border border-white/10 bg-white/5 p-3">3. Policy checker redacts unsafe output</li>
-              <li class="rounded-lg border border-white/10 bg-white/5 p-3">4. Response formatter streams JSON payload</li>
-            </ol>
+            <h3 class="text-lg font-semibold text-white mb-2">Edge Vision</h3>
+            <p class="text-sm text-gray-400 leading-relaxed">High-speed local detection with Gemini AI for zero-false-positive verification.</p>
+          </div>
+
+          <div class="group relative bg-brand-card border border-brand-border rounded-2xl p-6 hover:border-brand-borderHover transition-all duration-300">
+            <div class="w-12 h-12 bg-black border border-brand-border rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+              <i data-lucide="activity" class="w-6 h-6 text-red-400"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-white mb-2">Priority Engine</h3>
+            <p class="text-sm text-gray-400 leading-relaxed">Context-aware scoring evaluating life threat, spread risk, and location context.</p>
+          </div>
+
+          <div class="group relative bg-brand-card border border-brand-border rounded-2xl p-6 hover:border-brand-borderHover transition-all duration-300">
+            <div class="w-12 h-12 bg-black border border-brand-border rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform">
+              <i data-lucide="zap" class="w-6 h-6 text-yellow-400"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-white mb-2">Guest Integration</h3>
+            <p class="text-sm text-gray-400 leading-relaxed">Real-time bi-directional WebSocket alerts and geo-located SOS panics.</p>
           </div>
         </div>
-      </section>
 
-      <section id="how" class="mx-auto max-w-7xl px-6 py-10 lg:px-8">
-        <h2 class="text-3xl font-semibold text-white sm:text-4xl">Built for agent orchestration teams</h2>
-        <div class="mt-8 grid gap-6 md:grid-cols-3">
-          <article class="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <h3 class="text-lg font-medium text-white">Smart Routing</h3>
-            <p class="mt-2 text-sm text-slate-300">Dynamically selects specialist agents based on intent, language, and confidence score.</p>
-          </article>
-          <article class="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <h3 class="text-lg font-medium text-white">Response Guardrails</h3>
-            <p class="mt-2 text-sm text-slate-300">Applies safety, compliance, and brand policy checks before delivery.</p>
-          </article>
-          <article class="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <h3 class="text-lg font-medium text-white">Observability First</h3>
-            <p class="mt-2 text-sm text-slate-300">Tracks latency, fallback rate, and response quality with trace-level visibility.</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="simulator" class="mx-auto grid max-w-7xl gap-6 px-6 py-16 lg:grid-cols-2 lg:px-8">
-        <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
-          <h3 class="text-xl font-medium text-white">Request simulator</h3>
-          <p class="mt-2 text-sm text-slate-300">Type a user prompt to simulate the AI agent response service flow.</p>
-          <form id="simulateForm" class="mt-5 space-y-3">
-            <input
-              id="locationInput"
-              class="w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              placeholder="Location (for example: Tower Wing - Floor 2)"
-            />
-            <textarea
-              id="promptInput"
-              class="w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              rows="4"
-              placeholder="Example: Summarize this support ticket and assign urgency."
-            ></textarea>
-            <button type="submit" class="rounded-xl bg-brand-500 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-600">
-              Simulate Response
-            </button>
-          </form>
-        </div>
-        <div class="rounded-2xl border border-white/10 bg-slate-900 p-6">
-          <div class="mb-4 flex items-center justify-between">
-            <h3 class="text-xl font-medium text-white">Service output</h3>
-            <span id="latencyBadge" class="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-300">-- ms</span>
+        <!-- Simulation Tool -->
+        <div class="grid lg:grid-cols-2 gap-8 items-start">
+          <div class="rounded-2xl border border-brand-border bg-brand-card p-8 shadow-2xl">
+            <h2 class="text-2xl font-bold text-white mb-6">Simulate Incident</h2>
+            <form id="simulateForm" class="space-y-6">
+              <div>
+                <label class="block text-sm font-medium text-gray-400 mb-2">Incident Location</label>
+                <input
+                  id="locationInput"
+                  required
+                  class="w-full rounded-xl border border-[#333] bg-black px-4 py-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-brand-gold transition-colors"
+                  placeholder="e.g. Tower Wing - Floor 2"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-400 mb-2">Description</label>
+                <textarea
+                  id="promptInput"
+                  required
+                  rows="4"
+                  class="w-full rounded-xl border border-[#333] bg-black px-4 py-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-brand-gold transition-colors"
+                  placeholder="e.g. A guest is trapped in the elevator and smoke is filling the lobby."
+                ></textarea>
+              </div>
+              <button type="submit" class="w-full rounded-xl bg-white px-5 py-4 text-sm font-bold text-black hover:bg-brand-gold transition-all uppercase tracking-widest">
+                Run Intelligence Pipeline
+              </button>
+            </form>
           </div>
-          <div id="responseFeed" class="min-h-64 space-y-3 rounded-xl border border-white/10 bg-slate-950 p-4 text-sm text-slate-300">
-            <p>Awaiting request...</p>
-          </div>
-        </div>
-      </section>
 
-      <section id="metrics" class="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-        <h2 class="text-2xl font-semibold text-white sm:text-3xl">SLA & quality snapshot</h2>
-        <div class="mt-6 grid gap-6 md:grid-cols-2">
-          <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <div class="mb-2 flex justify-between text-sm text-slate-300"><span>Guardrail pass rate</span><span id="guardrailRate">98%</span></div>
-            <div class="h-2 rounded-full bg-slate-800"><div id="guardrailBar" class="h-2 w-[98%] rounded-full bg-brand-500"></div></div>
+          <div class="rounded-2xl border border-brand-border bg-black p-8 h-full flex flex-col">
+            <div class="flex items-center justify-between mb-6">
+              <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Engine Output</h3>
+              <span id="latencyBadge" class="rounded-full bg-[#111] border border-[#333] px-3 py-1 text-xs text-gray-400">-- ms</span>
+            </div>
+            <div id="responseFeed" class="flex-1 font-mono text-sm space-y-2 overflow-y-auto max-h-[350px] custom-scrollbar">
+              <p class="text-gray-600 italic">Waiting for input...</p>
+            </div>
           </div>
-          <div class="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <div class="mb-2 flex justify-between text-sm text-slate-300"><span>Fallback avoidance</span><span id="fallbackRate">95%</span></div>
-            <div class="h-2 rounded-full bg-slate-800"><div id="fallbackBar" class="h-2 w-[95%] rounded-full bg-cyan-400"></div></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="contact" class="mx-auto max-w-4xl px-6 py-16 text-center lg:px-8">
-        <h2 class="text-3xl font-semibold text-white sm:text-4xl">Need a response service for your AI stack?</h2>
-        <p class="mx-auto mt-4 max-w-2xl text-slate-300">Deploy the Crisis Response Engine as a standalone API or inside your existing agent platform.</p>
-        <a href="#" class="mt-8 inline-flex rounded-xl bg-white px-6 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-200">Book Technical Demo</a>
-      </section>
-    </main>
-
-    <footer class="border-t border-white/10 px-6 py-8">
-      <div class="mx-auto flex max-w-7xl flex-col gap-3 text-sm text-slate-400 md:flex-row md:items-center md:justify-between">
-        <p>© <span id="year"></span> Taj Hotel. Autonomous Crisis Response.</p>
-        <div class="flex gap-4">
-          <a href="#" class="hover:text-slate-200">Privacy</a>
-          <a href="#" class="hover:text-slate-200">Status</a>
-          <a href="#" class="hover:text-slate-200">Docs</a>
         </div>
       </div>
-    </footer>
+    </div>
 
     <script>
-      const menuBtn = document.getElementById("menuBtn");
-      const mobileMenu = document.getElementById("mobileMenu");
-      const year = document.getElementById("year");
+      lucide.createIcons();
+
       const simulateForm = document.getElementById("simulateForm");
       const promptInput = document.getElementById("promptInput");
       const locationInput = document.getElementById("locationInput");
       const responseFeed = document.getElementById("responseFeed");
       const latencyBadge = document.getElementById("latencyBadge");
-      const guardrailRate = document.getElementById("guardrailRate");
-      const guardrailBar = document.getElementById("guardrailBar");
-      const fallbackRate = document.getElementById("fallbackRate");
-      const fallbackBar = document.getElementById("fallbackBar");
       const API_BASE_URL = "http://localhost:3001";
-
-      menuBtn.addEventListener("click", () => {
-        mobileMenu.classList.toggle("hidden");
-      });
 
       function addLogLine(text, tone) {
         const el = document.createElement("p");
         el.className = tone;
         el.textContent = text;
         responseFeed.appendChild(el);
+        responseFeed.scrollTop = responseFeed.scrollHeight;
       }
 
-      async function refreshEnvironmentMetrics() {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/environment`);
-          if (!res.ok) return;
-          const env = await res.json();
-          const weather = env.weather || {};
-          const seismic = env.seismic || {};
-
-          const guardrail = weather.rain != null ? Math.max(90, 100 - Math.round(weather.rain * 4)) : 97;
-          const fallback = seismic.status === "Alert" ? 91 : seismic.status === "Activity" ? 94 : 97;
-          guardrailRate.textContent = guardrail + "%";
-          fallbackRate.textContent = fallback + "%";
-          guardrailBar.style.width = guardrail + "%";
-          fallbackBar.style.width = fallback + "%";
-        } catch (error) {
-          // Keep existing defaults when backend is unreachable.
-        }
-      }
-
-      simulateForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const prompt = promptInput.value.trim();
-        const location = locationInput.value.trim() || "Taj Hotel Mumbai - General";
-        if (!prompt) return;
+      simulateForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const prompt = promptInput.value;
+        const location = locationInput.value;
+        const start = performance.now();
 
         responseFeed.innerHTML = "";
-        addLogLine("Ingress: Request accepted.", "text-slate-300");
-        addLogLine("Router: Calling /api/incidents/simulate...", "text-slate-300");
-        addLogLine("Policy: Waiting for backend scoring and overrides...", "text-amber-300");
+        addLogLine("> INITIATING UNIFIED PRIORITY ENGINE...", "text-blue-400");
+        addLogLine(`> ANALYZING: ${prompt.substring(0, 50)}...`, "text-gray-500");
 
-        const start = performance.now();
         try {
           const res = await fetch(`${API_BASE_URL}/api/incidents/simulate`, {
             method: "POST",
@@ -251,28 +152,25 @@
             body: JSON.stringify({ description: prompt, location })
           });
 
-          if (!res.ok) {
-            throw new Error("Backend returned an error");
-          }
+          if (!res.ok) throw new Error("Backend offline or error");
 
           const incident = await res.json();
           const latency = Math.round(performance.now() - start);
           latencyBadge.textContent = latency + " ms";
 
-          addLogLine(`Response: ${incident.hazardType} classified as ${incident.priorityBand} (score ${incident.finalPriority}).`, "text-emerald-300");
+          addLogLine(`\n> RESULT: ${incident.hazardType.toUpperCase()} DETECTED`, "text-green-500 font-bold");
+          addLogLine(`> TIER: ${incident.tier} (Score: ${incident.finalPriority}/10)`, "text-green-400");
+          
           if (Array.isArray(incident.explanation)) {
-            incident.explanation.slice(0, 2).forEach((item) => addLogLine("Reason: " + item, "text-slate-200"));
+            incident.explanation.slice(0, 2).forEach((item) => addLogLine(`> NOTE: ${item}`, "text-gray-300"));
           }
+          addLogLine("\n> BROADCASTING TO DASHBOARD AND GUEST PORTALS...", "text-yellow-500");
+          
         } catch (error) {
           latencyBadge.textContent = "-- ms";
-          addLogLine("Error: Failed to reach backend. Start backend on port 3001.", "text-red-300");
+          addLogLine("> ERROR: Failed to reach backend. Ensure server is running on port 3001.", "text-red-500");
         }
-
-        refreshEnvironmentMetrics();
       });
-
-      refreshEnvironmentMetrics();
-      year.textContent = new Date().getFullYear();
     </script>
   </body>
 </html>
