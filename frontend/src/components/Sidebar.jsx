@@ -21,7 +21,6 @@ const NAV_ITEMS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard, description: 'Command center dashboard' },
   { id: 'incidents', label: 'Incidents', icon: AlertCircle, badge: null, description: 'Active incident feed' },
   { id: 'services', label: 'Services', icon: Bell, description: 'Guest service requests' },
-  { id: 'security', label: 'Security Scanner', icon: Camera, description: 'AI Threat Assessment' },
   { id: 'analytics', label: 'Analytics', icon: BarChart3, description: 'Performance metrics' },
   { id: 'sensors', label: 'Sensors', icon: Radio, description: 'IoT device network' },
 ];
