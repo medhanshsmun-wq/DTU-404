@@ -339,8 +339,12 @@ app.post("/api/cctv/analyze_frame", async (req, res) => {
       res.json({ status: "safe" });
     }
   } catch (err) {
-    console.error("[CCTV Autonomous] Analysis failed:", err.message);
-    res.status(500).json({ error: "CCTV analysis failed" });
+    console.error("[CCTV Autonomous] ❌ ANALYSIS FATAL ERROR:", err);
+    res.status(500).json({ 
+      error: "CCTV analysis failed", 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined 
+    });
   }
 });
 
