@@ -274,8 +274,14 @@ app.post("/api/cctv/analyze_frame", async (req, res) => {
     };
 
     console.log(`[CCTV Autonomous] Analyzing frame from ${cameraLabel} (${cameraId})...`);
-    const aiResult = await analyzeCCTVImage(frameBase64, mimeType || "image/jpeg", cameraLabel, environmentContext);
     
+    // Use a timeout to prevent hanging on slow Gemini responses (Render has a 30s limit)
+    const aiPromise = analyzeCCTVImage(frameBase64, mimeType || "image/jpeg", cameraLabel, environmentContext);
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Gemini AI response timeout")), 25000)
+    );
+
+    const aiResult = await Promise.race([aiPromise, timeoutPromise]);
     if (aiResult) {
       // Check for existing active incident at this location of this type to avoid duplicates
       const key = dedupKey("autonomous_cctv", cameraLabel, aiResult.hazardType);
